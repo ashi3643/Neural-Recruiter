@@ -28,7 +28,8 @@ const CONSULTING_FIRMS = [
   'tcs', 'tata consultancy', 'infosys', 'wipro', 'accenture', 'cognizant',
   'capgemini', 'hcl technologies', 'hcltech', 'tech mahindra', 'mphasis',
   'ltimindtree', 'mindtree', 'l&t infotech', 'hexaware', 'niit technologies',
-  'mastech', 'syntel', 'zensar', 'birlasoft', 'infosonics', 'sonata software'
+  'mastech', 'syntel', 'zensar', 'birlasoft', 'infosonics', 'sonata software',
+  'genpact', 'deloitte', 'ey', 'ernst & young', 'pwc', 'kpmg', 'cognizant technology solutions'
 ];
 
 const CORE_AI_SKILLS = [
@@ -148,6 +149,123 @@ export function score_skills(candidate: Candidate, tier: 'A' | 'B' | 'C'): numbe
   }
 
   return Math.min(total / 3.0, 1.0);
+}
+
+export function score_skills_with_assessment(candidate: Candidate, tier: 'A' | 'B' | 'C'): number {
+  const skills = candidate.skills || [];
+  let total = 0.0;
+  
+  const PROF: Record<string, number> = {
+    'expert': 1.0,
+    'advanced': 0.75,
+    'intermediate': 0.5,
+    'beginner': 0.25
+  };
+
+  for (const s of skills) {
+    const name = s.name.toLowerCase();
+    if (CORE_AI_SKILLS.some(k => name.includes(k))) {
+      const prof = PROF[s.proficiency] || 0.25;
+      const duration_frac = Math.min(s.duration_months || 1, 36) / 36;
+      total += prof * duration_frac;
+    }
+  }
+
+  const base_score = Math.min(total / 3.0, 1.0);
+
+  // Tier B: must have some core AI skills to rank, otherwise suppress
+  if (tier === 'B' && total < 0.3) {
+    return 0.0;
+  }
+
+  const signals = candidate.redrob_signals || {};
+  const scores = signals.skill_assessment_scores || {};
+  const score_keys = Object.keys(scores);
+  if (score_keys.length === 0) {
+    return 0.70 * base_score + 0.30 * 0.50; // default neutral assessment score
+  }
+
+  const relevant_scores: number[] = [];
+  const relevance_keywords = ['python', 'machine learning', 'data science', 'ai ', 'nlp', 'deep learning', 'pytorch', 'tensorflow', 'algorithms', 'software', 'sql', 'retrieval', 'search'];
+  for (const k of score_keys) {
+    const k_lower = k.toLowerCase();
+    if (relevance_keywords.some(kw => k_lower.includes(kw))) {
+      const val = Number(scores[k]);
+      if (!isNaN(val)) {
+        relevant_scores.push(val);
+      }
+    }
+  }
+
+  const assessment_score = relevant_scores.length > 0
+    ? Math.min(relevant_scores.reduce((sum, v) => sum + v, 0) / relevant_scores.length / 100.0, 1.0)
+    : 0.50;
+
+  return 0.70 * base_score + 0.30 * assessment_score;
+}
+
+const CORE_JD_SEMANTIC_KEYWORDS = [
+  'retrieval', 'ranking', 'recommendation', 'search', 'dense retrieval', 
+  'hybrid search', 'hybrid retrieval', 'vector search', 'embeddings', 
+  'sentence transformers', 'bm25', 'information retrieval', 'learning to rank', 
+  'ltr', 'reranking', 'ndcg', 'mrr', 'map', 'evaluat', 'ab test', 'a/b test',
+  'pinecone', 'weaviate', 'qdrant', 'milvus', 'faiss', 'chroma'
+];
+
+export function score_jd_semantic_fit(candidate: Candidate): number {
+  const profile = candidate.profile || {};
+  const headline = (profile.headline || '').toLowerCase();
+  const summary = (profile.summary || '').toLowerCase();
+  
+  let text = `${headline} ${summary} ${profile.current_title || ''}`;
+  
+  const career = candidate.career_history || [];
+  for (const role of career) {
+    text += ` ${(role.title || '').toLowerCase()} ${(role.description || '').toLowerCase()}`;
+  }
+  
+  let match_count = 0;
+  const unique_matches = new Set<string>();
+  
+  for (const kw of CORE_JD_SEMANTIC_KEYWORDS) {
+    if (text.includes(kw)) {
+      unique_matches.add(kw);
+      let idx = text.indexOf(kw);
+      while (idx !== -1) {
+        match_count++;
+        idx = text.indexOf(kw, idx + kw.length);
+      }
+    }
+  }
+  
+  const unique_ratio = Math.min(unique_matches.size / 6.0, 1.0);
+  const freq_score = Math.min(match_count / 15.0, 1.0);
+  
+  return 0.60 * unique_ratio + 0.40 * freq_score;
+}
+
+const PENALTY_DOMAINS = [
+  'computer vision', 'computervision', 'speech recognition', 'robotics',
+  'image classification', 'object detection', 'text-to-speech', 'text to speech',
+  'tts', 'lidar', 'autonomous vehicles', 'autonomous driving'
+];
+
+export function get_domain_penalty_multiplier(candidate: Candidate): number {
+  const profile = candidate.profile || {};
+  const headline = (profile.headline || '').toLowerCase();
+  const summary = (profile.summary || '').toLowerCase();
+  const title = (profile.current_title || '').toLowerCase();
+  
+  const text = `${headline} ${summary} ${title}`;
+  
+  const has_penalty_domain = PENALTY_DOMAINS.some(d => text.includes(d));
+  if (has_penalty_domain) {
+    const search_hits = ['search', 'retrieval', 'recommend', 'ranking'].filter(kw => text.includes(kw)).length;
+    if (search_hits < 2) {
+      return 0.50;
+    }
+  }
+  return 1.0;
 }
 
 export function score_career_quality(candidate: Candidate): number {
@@ -332,6 +450,7 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
         behavioral_availability: 0,
         location_fit: 0,
         github_signal: 0,
+        jd_semantic_fit: 0,
       },
       is_honeypot: true,
       honeypot_reasons: reasons,
@@ -347,8 +466,8 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
   const tier = title_align_info.tier;
   const title_align = title_align_info.score;
 
-  // 3. Pre-score skills (used for Tier B suppression matching Python)
-  const skills = score_skills(candidate, tier);
+  // 3. Pre-score skills with assessment (used for Tier B suppression matching Python)
+  const skills = score_skills_with_assessment(candidate, tier);
 
   // Suppressed adjacent tech roles if no AI skills
   const career = score_career_quality(candidate);
@@ -364,7 +483,8 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
         experience_range: score_experience_range(candidate.profile.years_of_experience),
         behavioral_availability: score_behavioral_availability(candidate).score,
         location_fit: score_location(candidate),
-        github_signal: score_github(candidate)
+        github_signal: score_github(candidate),
+        jd_semantic_fit: 0,
       },
       is_honeypot: false,
       honeypot_reasons: [],
@@ -387,7 +507,8 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
         experience_range: score_experience_range(candidate.profile.years_of_experience),
         behavioral_availability: score_behavioral_availability(candidate).score,
         location_fit: score_location(candidate),
-        github_signal: score_github(candidate)
+        github_signal: score_github(candidate),
+        jd_semantic_fit: 0,
       },
       is_honeypot: false,
       honeypot_reasons: [],
@@ -405,6 +526,7 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
   const multiplier = behav_detail.multiplier;
   const loc = score_location(candidate);
   const github = score_github(candidate);
+  const jd_semantic_fit = score_jd_semantic_fit(candidate);
 
   const comps: ScoreComponents = {
     title_alignment: title_align,
@@ -413,7 +535,8 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
     experience_range: exp,
     behavioral_availability: availability,
     location_fit: loc,
-    github_signal: github
+    github_signal: github,
+    jd_semantic_fit: jd_semantic_fit,
   };
 
   // 5. Weighted score (matching target weights)
@@ -423,9 +546,11 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
                    (weights.behavioral_availability * availability) +
                    (weights.experience_range * exp) +
                    (weights.location_fit * loc) +
-                   (weights.github_signal * github);
+                   (weights.github_signal * github) +
+                   (weights.jd_semantic_fit * jd_semantic_fit);
 
-  const finalScore = rawScore * multiplier;
+  const domain_mult = get_domain_penalty_multiplier(candidate);
+  const finalScore = rawScore * multiplier * domain_mult;
   const finalScoreRounded = Math.round(finalScore * 10000) / 10000;
 
   const reasoning = generate_reasoning(candidate, finalScoreRounded, comps);

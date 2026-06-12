@@ -57,6 +57,11 @@ export default function WeightsConfig({ weights, onWeightsChange }: WeightsConfi
       name: 'GitHub Activity', 
       desc: 'Recent commit and coding patterns', 
       color: 'bg-slate-400' 
+    },
+    jd_semantic_fit: {
+      name: 'JD Semantic Relevance',
+      desc: 'Density of search/retrieval domain terms in CV text',
+      color: 'bg-rose-500'
     }
   };
 
@@ -121,11 +126,11 @@ export default function WeightsConfig({ weights, onWeightsChange }: WeightsConfi
       <div className="mt-5 pt-4 border-t border-[#ececeb] flex items-center justify-between text-xs font-mono">
         <span className="text-[#666] font-medium">Total Signals Weights Sum:</span>
         <span className={`px-2.5 py-0.5 rounded font-bold border ${
-          Math.abs(totalWeight - 1.10) < 0.01 
+          Math.abs(totalWeight - 1.00) < 0.01 
             ? 'bg-green-50 text-green-700 border-green-200' 
             : 'bg-yellow-50 text-yellow-700 border-yellow-200'
         }`}>
-          {totalWeight.toFixed(2)} {Math.abs(totalWeight - 1.10) < 0.01 ? '(Nominal)' : '(Calibrated)'}
+          {totalWeight.toFixed(2)} {Math.abs(totalWeight - 1.00) < 0.01 ? '(Nominal)' : '(Calibrated)'}
         </span>
       </div>
     </div>

@@ -1,0 +1,9 @@
+# NeuralRecruiter Track 01 Ranker Dependencies
+#
+# This ranking pipeline is optimized for high performance on standard CPUs
+# and operates fully offline. It consumes zero network calls or external APIs,
+# executing strictly with the Python standard library.
+#
+# Requirements:
+# - Python >= 3.10 (tested with 3.10, 3.11, 3.12, 3.13)
+# - No external pip packages required.

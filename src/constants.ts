@@ -15,15 +15,16 @@ export const REDROB_JD = {
   ]
 };
 
-// Default weights summing to 1.10 per Master Plan
+// Default weights summing to 1.00 per Master Plan
 export const DEFAULT_WEIGHTS: SignalWeights = {
-  career_quality: 0.30,
-  skills_depth: 0.25,
-  title_alignment: 0.20,
-  behavioral_availability: 0.15,
+  career_quality: 0.20,
+  skills_depth: 0.22,
+  jd_semantic_fit: 0.15,
+  title_alignment: 0.15,
   experience_range: 0.10,
-  location_fit: 0.05,
-  github_signal: 0.05,
+  behavioral_availability: 0.10,
+  location_fit: 0.04,
+  github_signal: 0.04,
 };
 
 export const CONSULTING_FIRMS = [

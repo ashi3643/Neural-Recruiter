@@ -44,6 +44,7 @@ CONSULTING_FIRMS = {
     'capgemini', 'hcl technologies', 'hcltech', 'tech mahindra', 'mphasis',
     'ltimindtree', 'mindtree', 'l&t infotech', 'hexaware', 'niit technologies',
     'mastech', 'syntel', 'zensar', 'birlasoft', 'infosonics', 'sonata software',
+    'genpact', 'deloitte', 'ey', 'ernst & young', 'pwc', 'kpmg', 'cognizant technology solutions',
 }
 
 CORE_AI_SKILLS = {
@@ -262,6 +263,91 @@ def score_github(signals: dict) -> float:
     else:          return 0.20
 
 
+def score_skills_with_assessment(skills: list, signals: dict, tier: str) -> float:
+    """Skills depth combo score incorporating base skills plus validated Redrob assessments."""
+    base_score = score_skills(skills, tier)
+    if tier == 'B' and base_score == 0.0:
+        return 0.0
+
+    scores = signals.get('skill_assessment_scores', {}) if isinstance(signals, dict) else {}
+    if not scores:
+        assessment_score = 0.50
+    else:
+        relevant_scores = []
+        for s, score in scores.items():
+            s_lower = s.lower()
+            if any(k in s_lower for k in ['python', 'machine learning', 'data science', 'ai ', 'nlp', 'deep learning', 'pytorch', 'tensorflow', 'algorithms', 'software', 'sql', 'retrieval', 'search']):
+                try:
+                    relevant_scores.append(float(score))
+                except (ValueError, TypeError):
+                    pass
+        if not relevant_scores:
+            assessment_score = 0.50
+        else:
+            assessment_score = min(sum(relevant_scores) / len(relevant_scores) / 100.0, 1.0)
+
+    combined_score = 0.70 * base_score + 0.30 * assessment_score
+    return min(combined_score, 1.0)
+
+
+CORE_JD_SEMANTIC_KEYWORDS = [
+    'retrieval', 'ranking', 'recommendation', 'search', 'dense retrieval', 
+    'hybrid search', 'hybrid retrieval', 'vector search', 'embeddings', 
+    'sentence transformers', 'bm25', 'information retrieval', 'learning to rank', 
+    'ltr', 'reranking', 'ndcg', 'mrr', 'map', 'evaluat', 'ab test', 'a/b test',
+    'pinecone', 'weaviate', 'qdrant', 'milvus', 'faiss', 'chroma'
+]
+
+def score_jd_semantic_fit(candidate: dict) -> float:
+    """Evaluates the semantic fit of the candidate's headline, summary, and career description."""
+    profile = candidate.get('profile', {})
+    headline = (profile.get('headline') or '').lower()
+    summary = (profile.get('summary') or '').lower()
+    
+    text = f"{headline} {summary} {profile.get('current_title', '').lower()}"
+    
+    for role in candidate.get('career_history', []):
+        title = (role.get('title') or '').lower()
+        desc = (role.get('description') or '').lower()
+        text += f" {title} {desc}"
+        
+    match_count = 0
+    unique_matches = set()
+    for kw in CORE_JD_SEMANTIC_KEYWORDS:
+        count = text.count(kw)
+        if count > 0:
+            match_count += count
+            unique_matches.add(kw)
+            
+    unique_ratio = min(len(unique_matches) / 6.0, 1.0)
+    freq_score = min(match_count / 15.0, 1.0)
+    
+    return 0.60 * unique_ratio + 0.40 * freq_score
+
+
+PENALTY_DOMAINS = [
+    'computer vision', 'computervision', 'speech recognition', 'robotics', 
+    'image classification', 'object detection', 'text-to-speech', 'text to speech', 
+    'tts', 'lidar', 'autonomous vehicles', 'autonomous driving'
+]
+
+def get_domain_penalty_multiplier(candidate: dict) -> float:
+    """Returns a multiplier (0.5 or 1.0) if candidate is from a disqualifying/irrelevant domain."""
+    profile = candidate.get('profile', {})
+    headline = (profile.get('headline') or '').lower()
+    summary = (profile.get('summary') or '').lower()
+    title = (profile.get('current_title') or '').lower()
+    
+    text = f"{headline} {summary} {title}"
+    
+    penalty_hits = sum(1 for d in PENALTY_DOMAINS if d in text)
+    if penalty_hits >= 1:
+        search_hits = sum(1 for kw in ['search', 'retrieval', 'recommend', 'ranking'] if kw in text)
+        if search_hits < 2:
+            return 0.50
+    return 1.0
+
+
 # ── REASONING GENERATION ─────────────────────────────────────────────────────
 
 def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
@@ -310,13 +396,14 @@ def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
 # ── MAIN SCORER ───────────────────────────────────────────────────────────────
 
 WEIGHTS = {
-    'title':    0.20,
-    'career':   0.30,
-    'skills':   0.25,
-    'exp':      0.10,
-    'behav':    0.10,
-    'location': 0.03,
-    'github':   0.02,
+    'career_quality': 0.20,
+    'skills_depth': 0.22,
+    'jd_semantic_fit': 0.15,
+    'title_alignment': 0.15,
+    'experience_range': 0.10,
+    'behavioral_availability': 0.10,
+    'location_fit': 0.04,
+    'github_signal': 0.04,
 }
 
 def compute_score(candidate: dict) -> tuple[float, dict]:
@@ -324,48 +411,74 @@ def compute_score(candidate: dict) -> tuple[float, dict]:
 
     # 1. Honeypot check
     if is_honeypot(candidate):
-        return 0.0, {'reason': 'honeypot'}
+        return 0.0, {
+            'career_quality': 0, 'skills_depth': 0, 'jd_semantic_fit': 0,
+            'title_alignment': 0, 'experience_range': 0, 'experience': 0,
+            'behavioral_availability': 0, 'location_fit': 0, 'github_signal': 0,
+        }
 
-    profile = candidate['profile']
+    profile = candidate.get('profile', {})
     signals = candidate.get('redrob_signals', {})
     career = candidate.get('career_history', [])
     skills = candidate.get('skills', [])
 
     # 2. Title tier gate
     tier, title_score = get_title_tier_and_score(profile.get('current_title', ''))
-    if tier == 'C':
-        return 0.01, {'reason': f'keyword_stuffer:{profile["current_title"]}'}
-
-    # 3. Skills depth
-    skill_score = score_skills(skills, tier)
-    if tier == 'B' and skill_score == 0.0:
-        # Tier B (adjacent technical) with no core AI skills → suppress
-        return 0.05, {'reason': f'tech_no_ai_skills:{profile["current_title"]}'}
-
-    # 4. All other components
+    
+    # 3. Skills depth with assessment
+    skill_score = score_skills_with_assessment(skills, signals, tier)
+    
+    # Suppressed adjacent tech roles if no AI skills
     career_score = score_career_quality(career)
     exp_score = score_experience(profile.get('years_of_experience', 0))
     behav_score, behav_mult = score_behavioral(signals)
     loc_score = score_location(profile, signals)
     github_score = score_github(signals)
 
+    if tier == 'C':
+        return 0.01, {
+            'career_quality': career_score, 'skills_depth': skill_score, 'jd_semantic_fit': 0,
+            'title_alignment': title_score, 'experience_range': exp_score, 'experience': exp_score,
+            'behavioral_availability': behav_score, 'location_fit': loc_score, 'github_signal': github_score,
+            'reason': f'keyword_stuffer:{profile.get("current_title", "")}'
+        }
+
+    if tier == 'B' and skill_score == 0.0:
+        return 0.05, {
+            'career_quality': career_score, 'skills_depth': 0, 'jd_semantic_fit': 0,
+            'title_alignment': title_score, 'experience_range': exp_score, 'experience': exp_score,
+            'behavioral_availability': behav_score, 'location_fit': loc_score, 'github_signal': github_score,
+            'reason': f'tech_no_ai_skills:{profile.get("current_title", "")}'
+        }
+
+    # 4. Score normal components
+    semantic_score = score_jd_semantic_fit(candidate)
+    domain_mult = get_domain_penalty_multiplier(candidate)
+
     # 5. Weighted sum
     raw = (
-        WEIGHTS['title']    * title_score  +
-        WEIGHTS['career']   * career_score +
-        WEIGHTS['skills']   * skill_score  +
-        WEIGHTS['exp']      * exp_score    +
-        WEIGHTS['behav']    * behav_score  +
-        WEIGHTS['location'] * loc_score    +
-        WEIGHTS['github']   * github_score
+        WEIGHTS['career_quality']          * career_score +
+        WEIGHTS['skills_depth']            * skill_score +
+        WEIGHTS['jd_semantic_fit']         * semantic_score +
+        WEIGHTS['title_alignment']         * title_score +
+        WEIGHTS['experience_range']        * exp_score +
+        WEIGHTS['behavioral_availability'] * behav_score +
+        WEIGHTS['location_fit']            * loc_score +
+        WEIGHTS['github_signal']           * github_score
     )
 
-    final = round(raw * behav_mult, 4)
+    final = round(raw * behav_mult * domain_mult, 4)
 
     components = {
-        'title': title_score, 'career': career_score, 'skills': skill_score,
-        'experience': exp_score, 'behavioral': behav_score,
-        'location': loc_score, 'github': github_score,
+        'career_quality': career_score,
+        'skills_depth': skill_score,
+        'jd_semantic_fit': semantic_score,
+        'title_alignment': title_score,
+        'experience_range': exp_score,
+        'experience': exp_score,  # Keep for reasoning compatibility
+        'behavioral_availability': behav_score,
+        'location_fit': loc_score,
+        'github_signal': github_score,
     }
     return final, components
 

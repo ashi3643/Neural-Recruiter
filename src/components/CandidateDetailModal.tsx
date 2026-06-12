@@ -171,6 +171,7 @@ export default function CandidateDetailModal({ scoreResult, weights, onClose }: 
                 {[
                   { name: 'Career Trajectory Quality', val: components.career_quality, w: weights.career_quality },
                   { name: 'Target Skills Depth', val: components.skills_depth, w: weights.skills_depth },
+                  { name: 'JD Semantic Relevance', val: components.jd_semantic_fit || 0, w: weights.jd_semantic_fit || 0 },
                   { name: 'Current Title Alignment', val: components.title_alignment, w: weights.title_alignment },
                   { name: 'Behavior Availability', val: components.behavioral_availability, w: weights.behavioral_availability },
                   { name: 'YoE Suitability Curve', val: components.experience_range, w: weights.experience_range },

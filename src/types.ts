@@ -87,6 +87,7 @@ export interface ScoreComponents {
   behavioral_availability: number;
   location_fit: number;
   github_signal: number;
+  jd_semantic_fit: number;
 }
 
 export interface SignalWeights {
@@ -97,6 +98,7 @@ export interface SignalWeights {
   experience_range: number;
   location_fit: number;
   github_signal: number;
+  jd_semantic_fit: number;
 }
 
 export interface ScoringResult {
