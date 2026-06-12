@@ -178,8 +178,8 @@ export function score_skills_with_assessment(candidate: Candidate, tier: 'A' | '
     return 0.0;
   }
 
-  const signals = candidate.redrob_signals || {};
-  const scores = signals.skill_assessment_scores || {};
+  const signals = candidate.redrob_signals;
+  const scores = signals.skill_assessment_scores;
   const score_keys = Object.keys(scores);
   if (score_keys.length === 0) {
     return 0.70 * base_score + 0.30 * 0.50; // default neutral assessment score
@@ -213,7 +213,7 @@ const CORE_JD_SEMANTIC_KEYWORDS = [
 ];
 
 export function score_jd_semantic_fit(candidate: Candidate): number {
-  const profile = candidate.profile || {};
+  const profile = candidate.profile;
   const headline = (profile.headline || '').toLowerCase();
   const summary = (profile.summary || '').toLowerCase();
   
@@ -251,7 +251,7 @@ const PENALTY_DOMAINS = [
 ];
 
 export function get_domain_penalty_multiplier(candidate: Candidate): number {
-  const profile = candidate.profile || {};
+  const profile = candidate.profile;
   const headline = (profile.headline || '').toLowerCase();
   const summary = (profile.summary || '').toLowerCase();
   const title = (profile.current_title || '').toLowerCase();

@@ -1,5 +1,11 @@
 team_name: "Intelligent Recruiters"
 track_id: "01_data_and_ai_challenge"
+lead_contact: "Ashish Thyadi"
+contact_email: "ashishthyadi@gmail.com"
+team_members:
+  - name: "Ashish Thyadi"
+    role: "Lead ML & Search Architect"
+    email: "ashishthyadi@gmail.com"
 reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
 sandbox_url: "https://ais-dev-5jxyfqpoweauf4rtjolxar-750264708244.asia-east1.run.app"
 weighted_scoring_signals:

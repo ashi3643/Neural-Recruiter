@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
+import readline from 'readline';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -12,6 +14,39 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// API Endpoint: Retrieve candidates dynamically from candidates.jsonl
+app.get('/api/candidates', async (req: Request, res: Response) => {
+  try {
+    const candidatesPath = path.join(process.cwd(), 'candidates.jsonl');
+    if (!fs.existsSync(candidatesPath)) {
+      console.warn("candidates.jsonl not found on disk. Client should fall back to internal mock list.");
+      return res.status(200).json({ candidates: [] });
+    }
+
+    const candidates: any[] = [];
+    const fileStream = fs.createReadStream(candidatesPath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+
+    for await (const line of rl) {
+      if (line.trim()) {
+        try {
+          candidates.push(JSON.parse(line));
+        } catch (e) {
+          // Ignore parse errors on individual malformed lines
+        }
+      }
+    }
+
+    return res.status(200).json({ candidates });
+  } catch (err: any) {
+    console.error("Failed to parse candidates.jsonl server-side:", err);
+    return res.status(500).json({ error: "Failed to read candidates database." });
+  }
+});
 
 // Initialize server-side Gemini CLIENT using @google/genai SDK
 const getGeminiClient = (): GoogleGenAI | null => {

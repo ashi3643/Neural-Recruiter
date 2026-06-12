@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Sparkles, Sliders, Briefcase, FileText, Download, 
   Terminal, ShieldCheck, CheckCircle, RefreshCcw, HelpCircle, AlertOctagon
@@ -24,7 +24,36 @@ export default function App() {
   const [exportBanner, setExportBanner] = useState<string | null>(null);
 
   // Initialize candidates database
-  const candidatesList = useMemo(() => generate_candidates(), []);
+  const [candidatesList, setCandidatesList] = useState<Candidate[]>(() => generate_candidates());
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Synchronize candidates dynamically from server candidates.jsonl endpoint
+  useEffect(() => {
+    let active = true;
+    async function fetchCandidates() {
+      try {
+        setIsSyncing(true);
+        const res = await fetch('/api/candidates');
+        if (res.ok) {
+          const data = await res.json();
+          if (active && data.candidates && data.candidates.length > 0) {
+            setCandidatesList(data.candidates);
+            console.log(`Successfully fetched and parsed ${data.candidates.length} candidates dynamically from candidates.jsonl.`);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not sync with /api/candidates. Using robust local candidate list.", err);
+      } finally {
+        if (active) {
+          setIsSyncing(false);
+        }
+      }
+    }
+    fetchCandidates();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Compute scoring and sort dynamically as weights calibrate
   const scoredCandidates: ScoringResult[] = useMemo(() => {
@@ -86,6 +115,7 @@ export default function App() {
       experience_range: Math.round(Math.random() * 5) / 10,
       location_fit: Math.round(Math.random() * 2) / 10,
       github_signal: Math.round(Math.random() * 2) / 10,
+      jd_semantic_fit: Math.round(Math.random() * 30) / 100,
     };
     setWeights(randomWeights);
   };
