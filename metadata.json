@@ -1,0 +1,6 @@
+{
+  "name": "Intelligent Candidate Discovery Ranker",
+  "description": "An interactive, multi-dimensional candidate evaluation and ranking workspace that detects honeypots and scores applicants using career signals, skill taxonomies, and behavioral telemetry for modern hiring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

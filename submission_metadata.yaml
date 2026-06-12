@@ -1,0 +1,12 @@
+team_name: "Intelligent Recruiters"
+track_id: "01_data_and_ai_challenge"
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+sandbox_url: "https://ais-dev-5jxyfqpoweauf4rtjolxar-750264708244.asia-east1.run.app"
+weighted_scoring_signals:
+  career_quality: 0.30
+  skills_depth: 0.25
+  title_alignment: 0.20
+  behavioral_availability: 0.15
+  experience_range: 0.10
+  location_fit: 0.05
+  github_signal: 0.05
