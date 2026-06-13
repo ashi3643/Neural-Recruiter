@@ -15,6 +15,9 @@ import CandidatesTable from './components/CandidatesTable';
 import CandidateDetailModal from './components/CandidateDetailModal';
 import BlueprintView from './components/BlueprintView';
 
+// Mode: 'demo' for synthetic candidates, 'submission' for official dataset only
+const APP_MODE = 'submission'; // Change to 'demo' for UI testing with synthetic candidates
+
 export default function App() {
   const [weights, setWeights] = useState<SignalWeights>(DEFAULT_WEIGHTS);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
@@ -23,8 +26,14 @@ export default function App() {
   // Create state for notification/export banner
   const [exportBanner, setExportBanner] = useState<string | null>(null);
 
-  // Initialize candidates database
-  const [candidatesList, setCandidatesList] = useState<Candidate[]>(() => generate_candidates());
+  // Initialize candidates database based on mode
+  const [candidatesList, setCandidatesList] = useState<Candidate[]>(() => {
+    // In submission mode, never use synthetic candidates
+    if (APP_MODE === 'submission') {
+      return []; // Will be populated from official dataset via API
+    }
+    return generate_candidates(); // Demo mode: use synthetic candidates
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Synchronize candidates dynamically from server candidates.jsonl endpoint
@@ -42,7 +51,13 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.warn("Could not sync with /api/candidates. Using robust local candidate list.", err);
+        // In submission mode, if API fails, don't fall back to synthetic candidates
+        if (APP_MODE === 'submission') {
+          console.error("[SUBMISSION MODE] Failed to load official candidates. Cannot proceed with synthetic candidates.", err);
+          setCandidatesList([]);
+        } else {
+          console.warn("Could not sync with /api/candidates. Using robust local candidate list.", err);
+        }
       } finally {
         if (active) {
           setIsSyncing(false);

@@ -1,0 +1,34 @@
+Senior Machine Learning Engineer - Search & Recommendation Systems
+
+We are looking for a Senior Machine Learning Engineer to join our team building 
+state-of-the-art search and recommendation systems. You will work on dense retrieval,
+semantic search, and learning-to-rank algorithms that power our core product.
+
+Requirements:
+- 5-8 years of experience in machine learning or related field
+- Strong Python programming skills
+- Experience with PyTorch or TensorFlow
+- Knowledge of vector databases (Pinecone, Weaviate, Qdrant, Milvus)
+- Familiarity with sentence-transformers and text embeddings
+- Understanding of BM25 and information retrieval metrics (NDCG, MRR, MAP)
+- Experience with hybrid search architectures (dense + sparse retrieval)
+- Knowledge of learning-to-rank algorithms (LambdaMART, XGBoost ranking)
+
+Preferred:
+- PhD in Computer Science, Machine Learning, or related field
+- Experience with large-scale recommendation systems
+- Knowledge of re-ranking and cross-encoder models
+- Experience with Elasticsearch or OpenSearch
+- Familiarity with FAISS for approximate nearest neighbor search
+- Understanding of A/B testing frameworks for ranking systems
+
+Responsibilities:
+- Design and implement semantic search pipelines using dense embeddings
+- Build and optimize recommendation algorithms for personalization
+- Develop learning-to-rank models to improve search relevance
+- Conduct A/B experiments to validate ranking improvements
+- Collaborate with engineering teams to deploy models to production
+- Monitor and optimize system performance (latency, throughput, accuracy)
+
+Location: Bangalore, Hyderabad, Pune, or remote within India
+Notice Period: 30 days or less preferred

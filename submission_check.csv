@@ -1,0 +1,13 @@
+candidate_id,rank,score,reasoning
+CAND_1000003,1,0.9957,"Search Engineer, 6.0y exp; skills: dense retrieval, BM25, Transformers; response_rate=0.95; Bengaluru, Karnataka."
+CAND_1000000,2,0.9917,"Senior AI Engineer, 7.0y exp; skills: Sentence Transformers, RAG, PyTorch; response_rate=0.95; Bengaluru, Karnataka."
+CAND_1000001,3,0.9917,"Machine Learning Engineer, 6.0y exp; skills: sentence-transformers, RAG, PyTorch; response_rate=0.95; Bengaluru, Karnataka."
+CAND_1000002,4,0.9917,"Senior Machine Learning Engineer, 8.0y exp; skills: embeddings, retrieval augmented generation, LTR; response_rate=0.95; Bengaluru, Karnataka."
+CAND_1000004,5,0.9917,"Applied Scientist, 7.0y exp; skills: sentence-transformers, RAG, Hugging Face; response_rate=0.95; Bengaluru, Karnataka."
+CAND_1002001,6,0.6642,"Software Engineer, 7.0y exp; skills: Sentence Transformers, Pinecone, vector search; response_rate=0.85; Pune, Maharashtra."
+CAND_1001000,7,0.6251,"HR Operations Partner, 9.0y exp; skills: RAG, Pinecone, NDCG; response_rate=0.90; Chandigarh, India."
+CAND_1001001,8,0.6251,"Talent Scout Coordinator, 9.0y exp; skills: sentence-transformers, Milvus, RAG; response_rate=0.90; Chandigarh, India."
+CAND_1004000,9,0.435,"Senior AI Architect, 8.0y exp; skills: RAG, Pinecone; response_rate=0.85; Noida, India."
+CAND_1005000,10,0.2727,"Lead Computer Vision Scientist, 8.0y exp; skills: PyTorch; response_rate=0.90; Bengaluru, India."
+CAND_1002000,11,0.05,"Senior Software Engineer (Backend), 7.0y exp; skills: general tech skills; response_rate=0.85; Pune, Maharashtra."
+CAND_1003000,12,0.0,"Machine Learning Engineer, 3.0y exp; skills: general tech skills; response_rate=0.00; Noida, India; concern: 3.0y outside 5-9y range."

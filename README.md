@@ -1,25 +1,37 @@
 # NeuralRecruiter (Track 01) — India Runs 2026 Hackathon
 
-**Intelligent Candidate Discovery Engine for Redrob AI**  
-*A Competition-Grade, Offline-First, Multi-Stage Hybrid Ranking Pipeline*
+**Explainable Hybrid Candidate Ranking Engine with Dynamic Ingestion and Optional AI Reranking**  
+*A Competition-Grade, Config-Driven, Multi-Stage Ranking Pipeline*
 
-NeuralRecruiter is an elite, high-performance candidate discovery and ranking system engineered to process massive talent pools (100,000+ profiles) and identify the top 100 candidates for a highly nuanced **Senior AI Engineer** role at Redrob AI. 
+NeuralRecruiter is an elite, high-performance candidate discovery and ranking system engineered to process massive talent pools (100,000+ profiles) and identify the top 100 candidates for any role through dynamic job description parsing and configurable scoring weights.
 
-Our core design principle is **architectural honesty over AI-slop**. Instead of relying on expensive, black-box, or network-bound LLM API calls during the ranking loop (which violates competition speed and connectivity constraints), NeuralRecruiter utilizes a highly optimized, fully deterministic **Multi-Stage Hybrid Scoring Pipeline**.
+Our core design principle is **architectural honesty over AI-slop**. Instead of relying on expensive, black-box, or network-bound LLM API calls during the ranking loop (which violates competition speed and connectivity constraints), NeuralRecruiter utilizes a highly optimized, fully deterministic **Multi-Stage Hybrid Scoring Pipeline** with optional AI reranking for top-K candidates.
 
 ---
 
 ## 📊 Submission Deliverables
 
-1. ✅ **Code Repository**: Complete, clean, production-ready implementation with zero external dependencies.
+1. ✅ **Code Repository**: Complete, clean, production-ready implementation with minimal dependencies (PyYAML for config).
 2. ✅ **Presentation Deck**: [PRESENTATION.pdf](PRESENTATION.pdf) — 8-slide professional deck explaining approach, methodology, results, and technical stack.
 3. ✅ **Ranked Output**: [submission.csv](submission.csv) — Top 100 ranked candidates in official format with candidate_id, rank, score, and reasoning.
 4. ✅ **Metadata**: [submission_metadata.yaml](submission_metadata.yaml) — Team details and reproduction command.
 
 ### 🎬 Quick Start (30 seconds)
 ```bash
-# Run the ranking engine on your dataset
-python rank.py --candidates <your_candidates.jsonl> --out submission.csv
+# Basic usage with default JD (hardcoded for AI Engineer role)
+python rank.py --candidates candidates.jsonl --out submission.csv
+
+# Dynamic JD from file (NEW - works with any job description!)
+python rank.py --candidates candidates.jsonl --jd sample_job_description.txt --out submission.csv
+
+# CSV input instead of JSONL (NEW - import from Excel/CSV exports)
+python rank.py --candidates candidates.csv --jd job_description.txt --out submission.csv
+
+# Use LLM for JD parsing (requires OPENAI_API_KEY)
+python rank.py --candidates candidates.jsonl --jd job_description.txt --use-llm --out submission.csv
+
+# Load from cache for instant results (NEW - no re-ranking needed)
+python rank.py --candidates candidates.jsonl --jd job_description.txt --use-cache --out submission.csv
 
 # Validate the output
 python validate_submission.py submission.csv
@@ -33,6 +45,9 @@ open PRESENTATION.pdf  # or open in any PDF viewer
 ## 🚀 Key Features & Performance Metrics
 
 - **Extremely Fast**: Processes **100,000+ profiles in ~30–45 seconds** on a standard single-core CPU, using streaming file IO with zero external package dependencies.
+- **Dynamic Job Description Support**: **NEW** - Parse and rank candidates for ANY job description, not just hardcoded roles. Supports both rule-based and LLM-based JD parsing.
+- **CSV Import/Export**: **NEW** - Import candidates from CSV files (Excel exports) and export ranked results with full scoring breakdowns. No need to re-rank every time.
+- **Smart Caching**: **NEW** - Automatic caching of ranking results for instant retrieval on subsequent runs with the same JD and candidate set.
 - **Robust Guardrails**: Features a comprehensive 8-point **Honeypot Filter** that automatically flags and disqualifies profiles with fraudulent credentials, timeline paradoxes, or fake expert skill histories.
 - **Semantic Precision**: Implements an offline semantic key-phrase alignment scorer assessing breadth and frequency of Information Retrieval (IR), recommendation, and search system concepts over headlines, summaries, and career histories.
 - **Recruiter Guardrails**: Applies severe penalties for massive consulting systems (TCS, Infosys, Genpact, Deloitte, etc.) and wrong-domain AI specialists (e.g., computer vision and speech engineers) to prioritize candidate alignment.
@@ -40,7 +55,149 @@ open PRESENTATION.pdf  # or open in any PDF viewer
 
 ---
 
-## 🛠️ Multi-Stage Pipeline Architecture
+## 📈 Principal Engineering Improvements
+
+### Before vs After Comparison
+
+Based on principal engineering assessment, the following critical improvements have been implemented:
+
+**Before (Hardcoded System):**
+- Fixed job description (hardcoded for one role only)
+- Fixed date (2026-06-11 hardcoded in code)
+- Fixed semantic keywords (hardcoded in rank.py:293)
+- No CSV import/export capability
+- No caching for repeated runs
+- Windows console crashes on emoji output
+- Demo and submission candidates mixed
+
+**After (Dynamic Config-Driven System):**
+- Dynamic job description parsing (any JD via `--jd` flag)
+- Configurable date via config.yaml
+- All constants moved to config.yaml (weights, tiers, skills, locations)
+- CSV import/export (Excel/ATS integration)
+- Smart caching (instant results on repeated runs)
+- Windows console compatibility (emoji-free output)
+- Separated demo/submission modes (APP_MODE flag)
+
+### Configuration Example
+
+The system now uses `config.yaml` for all parameters:
+
+```yaml
+# Example: Change experience requirements for different roles
+experience:
+  default_min_years: 3  # Changed from 6 for junior roles
+  default_max_years: 5  # Changed from 8 for junior roles
+
+# Example: Adjust scoring weights for different priorities
+weights:
+  career_quality: 0.25    # Increased from 0.20
+  skills_depth: 0.25      # Increased from 0.22
+  jd_semantic_fit: 0.10   # Decreased from 0.15
+```
+
+### New Capabilities Added
+
+1. **Semantic Reranking Layer** (`semantic_reranker.py`)
+   - Optional AI layer using sentence-transformers
+   - Reranks top-K candidates with semantic similarity
+   - Can be enabled via config or command-line flag
+
+2. **Evaluation Metrics** (`evaluation.py`)
+   - Precision@K, Recall@K, NDCG@K
+   - Mean Reciprocal Rank (MRR)
+   - Mean Average Precision (MAP)
+   - Quantitative validation of ranking quality
+
+3. **Dynamic JD Parser** (`jd_parser.py`)
+   - Rule-based parsing (fast, offline)
+   - Optional LLM-based parsing (GPT-4)
+   - Extracts: title, role type, experience range, skills
+
+---
+
+## � Dynamic Job Description & CSV Workflow
+
+### Dynamic Job Description Parsing
+The system now supports **any job description**, not just hardcoded roles. Use the `--jd` flag to specify a job description file:
+
+```bash
+python rank.py --candidates candidates.jsonl --jd your_job_description.txt --out ranked_candidates.csv
+```
+
+The JD parser automatically extracts:
+- **Title & Role Type**: Identifies the primary role (ML Engineer, Data Scientist, Search Engineer, etc.)
+- **Experience Range**: Extracts required years of experience (e.g., "5-8 years")
+- **Required Skills**: Identifies mandatory technical skills from the JD
+- **Preferred Skills**: Extracts nice-to-have skills
+- **Domain Keywords**: Captures domain-specific terms (search, retrieval, NLP, CV, etc.)
+
+**JD Parsing Options:**
+- **Rule-based (default)**: Fast, offline, no API calls required
+- **LLM-based (optional)**: More accurate parsing using GPT-4 (requires `OPENAI_API_KEY`)
+
+```bash
+# Use LLM for better JD understanding
+export OPENAI_API_KEY=your_key_here
+python rank.py --candidates candidates.jsonl --jd jd.txt --use-llm --out results.csv
+```
+
+### CSV Import/Export
+Import candidates from CSV files (e.g., Excel exports from ATS systems):
+
+```bash
+# Convert JSONL to CSV (for Excel editing)
+python csv_utils.py candidates.jsonl candidates.csv
+
+# Rank from CSV directly
+python rank.py --candidates candidates.csv --jd jd.txt --out ranked.csv
+
+# Export with full scoring breakdown
+python rank.py --candidates candidates.jsonl --jd jd.txt --out ranked.csv --include-components
+```
+
+### Smart Caching
+Automatic caching eliminates re-ranking for the same JD + candidate set:
+
+```bash
+# First run: ranks and caches results
+python rank.py --candidates candidates.jsonl --jd jd.txt --out results.csv
+
+# Second run: loads from cache (instant!)
+python rank.py --candidates candidates.jsonl --jd jd.txt --use-cache --out results.csv
+```
+
+Cache files are saved as `.cache.csv` with metadata including JD hash and timestamp.
+
+### Workflow Examples
+
+**Example 1: Rank for Different Roles**
+```bash
+# Rank for ML Engineer role
+python rank.py --candidates candidates.jsonl --jd ml_engineer_jd.txt --out ml_ranked.csv
+
+# Rank for Data Scientist role (same candidates, different JD)
+python rank.py --candidates candidates.jsonl --jd data_scientist_jd.txt --out ds_ranked.csv
+
+# Rank for Backend Engineer role
+python rank.py --candidates candidates.jsonl --jd backend_jd.txt --out backend_ranked.csv
+```
+
+**Example 2: Import from ATS, Rank, Export**
+```bash
+# Import from ATS CSV export
+python csv_utils.py ats_export.csv candidates.jsonl
+
+# Rank with custom JD
+python rank.py --candidates candidates.jsonl --jd custom_role.txt --out final_ranked.csv
+
+# Export results with scoring breakdown for analysis
+python rank.py --candidates candidates.jsonl --jd custom_role.txt --out analysis.csv --include-components
+```
+
+---
+
+## ��️ Multi-Stage Pipeline Architecture
 
 NeuralRecruiter passes each profile through a strict linear multi-stage funnel designed for speed, accuracy, and explainability:
 

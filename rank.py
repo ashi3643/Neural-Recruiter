@@ -2,6 +2,7 @@
 """
 rank.py — India Runs Hackathon: Track 01 Candidate Ranking
 Usage: python rank.py --candidates candidates.jsonl --out submission.csv
+       python rank.py --candidates candidates.csv --jd job_description.txt --out submission.csv
 Runtime: ~60–90 seconds on CPU for 100K candidates. No network, no GPU needed.
 """
 
@@ -11,74 +12,41 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
-# ── CONSTANTS ─────────────────────────────────────────────────────────────────
+# Import dynamic JD parser and CSV utilities
+from jd_parser import parse_jd_from_file, parse_jd_from_text, ParsedJobDescription
+from csv_utils import import_candidates_from_csv, export_ranked_results, load_cached_ranking, save_ranking_cache
+from config_loader import get_config
+from semantic_reranker import integrate_semantic_reranking
 
-TIER_A_TITLES = {
-    # Direct matches — the JD's ideal role types
-    'ml engineer', 'machine learning engineer', 'senior machine learning engineer',
-    'ai engineer', 'senior ai engineer', 'applied scientist', 'applied ml engineer',
-    'applied ai engineer', 'nlp engineer', 'search engineer', 'ranking engineer',
-    'retrieval engineer', 'recommendations engineer', 'recommendation systems engineer',
-    'research engineer', 'ai research engineer', 'deep learning engineer',
-    'data scientist', 'senior data scientist', 'principal data scientist',
-    'staff machine learning engineer', 'junior ml engineer', 'ml researcher',
-}
+# ── LOAD CONFIGURATION ────────────────────────────────────────────────────────
 
-TIER_C_TITLES = {
-    # Non-technical keyword stuffers — should never rank in top 100
-    'hr manager', 'hr executive', 'human resources', 'recruitment manager',
-    'operations manager', 'operations executive', 'content writer', 'copywriter',
-    'accountant', 'financial analyst', 'finance manager',
-    'civil engineer', 'mechanical engineer', 'electrical engineer',
-    'marketing manager', 'marketing executive', 'digital marketing',
-    'sales executive', 'sales manager', 'business development',
-    'graphic designer', 'ui designer', 'ux designer',
-    'customer support', 'customer success',
-    'business analyst',  # with no tech background — see career gate below
-    'project manager',   # same
-}
+# Load configuration from config.yaml
+config = get_config()
 
-CONSULTING_FIRMS = {
-    'tcs', 'tata consultancy', 'infosys', 'wipro', 'accenture', 'cognizant',
-    'capgemini', 'hcl technologies', 'hcltech', 'tech mahindra', 'mphasis',
-    'ltimindtree', 'mindtree', 'l&t infotech', 'hexaware', 'niit technologies',
-    'mastech', 'syntel', 'zensar', 'birlasoft', 'infosonics', 'sonata software',
-    'genpact', 'deloitte', 'ey', 'ernst & young', 'pwc', 'kpmg', 'cognizant technology solutions',
-}
-
-CORE_AI_SKILLS = {
-    # Vector/semantic retrieval
-    'sentence transformers', 'sentence-transformers', 'embeddings', 'text embeddings',
-    'dense retrieval', 'semantic search', 'vector search', 'vector similarity',
-    # Vector DBs
-    'faiss', 'pinecone', 'qdrant', 'weaviate', 'milvus', 'opensearch',
-    'elasticsearch', 'chroma', 'pgvector', 'redis vector',
-    # Retrieval / ranking systems
-    'rag', 'retrieval augmented generation', 'hybrid retrieval', 'bm25',
-    'information retrieval', 'ranking system', 'recommendation system',
-    'learning to rank', 'ltr', 'lambdamart', 'reranking',
-    # Evaluation
-    'ndcg', 'mrr', 'map', 'precision@k', 'recall@k', 'ranking evaluation',
-    # Core ML frameworks (for AI engineers who write code)
-    'pytorch', 'tensorflow', 'hugging face', 'transformers', 'bert', 'roberta',
-    # MLOps (production experience signal)
-    'mlflow', 'kubeflow', 'triton', 'torchserve', 'bentoml',
-}
-
-PREFERRED_LOCATIONS = {
-    'pune', 'noida', 'bengaluru', 'bangalore', 'hyderabad',
-    'mumbai', 'delhi', 'gurgaon', 'gurugram', 'ncr', 'new delhi',
-    'chennai', 'kolkata', 'ahmedabad', 'india',
-}
-
-TODAY = date(2026, 6, 11)
+# Use config values (backwards compatibility with old variable names)
+TIER_A_TITLES = config.tier_a_titles
+TIER_C_TITLES = config.tier_c_titles
+CONSULTING_FIRMS = config.consulting_firms
+CORE_AI_SKILLS = config.core_ai_skills
+PREFERRED_LOCATIONS = config.preferred_locations
+TODAY = config.current_date
+CORE_JD_SEMANTIC_KEYWORDS = config.default_jd_semantic_keywords
 
 
 # ── TITLE TIER ────────────────────────────────────────────────────────────────
 
 def get_title_tier_and_score(title: str) -> tuple[str, float]:
     t = title.lower()
+    
+    # If we have a parsed JD, check if title matches JD role type
+    if PARSED_JD and PARSED_JD.role_type:
+        jd_role = PARSED_JD.role_type.lower()
+        if any(k in t for k in [jd_role, jd_role.replace(' ', ''), jd_role.replace('-', ' ')]):
+            return 'A', 1.0
+    
+    # Default tier checks
     if any(k in t for k in TIER_A_TITLES):
         return 'A', 1.0
     if any(k in t for k in TIER_C_TITLES):
@@ -90,6 +58,9 @@ def get_title_tier_and_score(title: str) -> tuple[str, float]:
 # ── HONEYPOT DETECTION ────────────────────────────────────────────────────────
 
 def is_honeypot(candidate: dict) -> bool:
+    if not config.enable_honeypot_detection:
+        return False
+        
     profile = candidate['profile']
     career = candidate.get('career_history', [])
     skills = candidate.get('skills', [])
@@ -99,7 +70,8 @@ def is_honeypot(candidate: dict) -> bool:
     # 1. Career history longer than stated years of experience
     career_total_months = sum(r.get('duration_months', 0) for r in career)
     profile_months = profile.get('years_of_experience', 0) * 12
-    if career_total_months > profile_months * 1.35 and career_total_months > 24:
+    tolerance = 1.0 + config.career_duration_tolerance
+    if career_total_months > profile_months * tolerance and career_total_months > config.minimum_career_months:
         return True
 
     # 2. Multiple expert-proficiency skills with 0 months duration
@@ -107,13 +79,13 @@ def is_honeypot(candidate: dict) -> bool:
         1 for s in skills
         if s.get('proficiency') == 'expert' and s.get('duration_months', 1) == 0
     )
-    if expert_zero >= 3:
+    if expert_zero >= config.expert_zero_threshold:
         return True
 
     # 3. Too many "expert" skills with near-zero endorsements
     expert_skills = [s for s in skills if s.get('proficiency') == 'expert']
     total_endorsements = sum(s.get('endorsements', 0) for s in skills)
-    if len(expert_skills) >= 8 and total_endorsements < 5:
+    if len(expert_skills) >= config.expert_skills_threshold and total_endorsements < config.expert_endorsements_threshold:
         return True
 
     # 4. Education end year in the future
@@ -156,14 +128,17 @@ def score_career_quality(career: list) -> float:
     total_months = max(sum(r.get('duration_months', 0) for r in career), 1)
 
     # Consulting firm penalty
-    consulting_months = sum(
-        r.get('duration_months', 0) for r in career
-        if any(f in r.get('company', '').lower() for f in CONSULTING_FIRMS)
-    )
-    consulting_ratio = consulting_months / total_months
-    if consulting_ratio >= 1.0:  # Entire career at consulting = hard disqualifier
-        return 0.05
-    product_score = 1.0 - consulting_ratio
+    if config.enable_consulting_penalties:
+        consulting_months = sum(
+            r.get('duration_months', 0) for r in career
+            if any(f in r.get('company', '').lower() for f in CONSULTING_FIRMS)
+        )
+        consulting_ratio = consulting_months / total_months
+        if consulting_ratio >= 1.0:  # Entire career at consulting = hard disqualifier
+            return 0.05
+        product_score = 1.0 - consulting_ratio
+    else:
+        product_score = 1.0
 
     # AI/ML role ratio in career
     AI_ROLE_KEYWORDS = {
@@ -189,15 +164,39 @@ def score_career_quality(career: list) -> float:
 
 
 def score_experience(yoe: float) -> float:
-    """Experience range: 6–8 years is the JD sweet spot."""
-    if 6.0 <= yoe <= 8.0:    return 1.0
-    elif 5.0 <= yoe < 6.0:   return 0.85
-    elif 8.0 < yoe <= 9.0:   return 0.85
-    elif 4.0 <= yoe < 5.0:   return 0.65
-    elif 9.0 < yoe <= 11.0:  return 0.60
-    elif 3.0 <= yoe < 4.0:   return 0.40
-    elif 11.0 < yoe <= 14.0: return 0.45
-    else:                    return 0.20   # <3 or >14 years
+    """Experience range: uses dynamic JD requirements if available, else defaults to config range."""
+    if PARSED_JD and PARSED_JD.experience_range:
+        min_exp, max_exp = PARSED_JD.experience_range
+        # Sweet spot is within JD range
+        if min_exp <= yoe <= max_exp:
+            return 1.0
+        # Close to range
+        elif min_exp - 1 <= yoe < min_exp:
+            return 0.85
+        elif max_exp < yoe <= max_exp + 2:
+            return 0.85
+        # Further away
+        elif min_exp - 2 <= yoe < min_exp - 1:
+            return 0.65
+        elif max_exp + 2 < yoe <= max_exp + 4:
+            return 0.60
+        else:
+            return 0.20
+    else:
+        # Default: use config default range
+        min_exp, max_exp = config.default_experience_range
+        if min_exp <= yoe <= max_exp:
+            return 1.0
+        elif min_exp - 1 <= yoe < min_exp:
+            return 0.85
+        elif max_exp < yoe <= max_exp + 2:
+            return 0.85
+        elif min_exp - 2 <= yoe < min_exp - 1:
+            return 0.65
+        elif max_exp + 2 < yoe <= max_exp + 4:
+            return 0.60
+        else:
+            return 0.20
 
 
 def score_behavioral(signals: dict) -> tuple[float, float]:
@@ -214,9 +213,12 @@ def score_behavioral(signals: dict) -> tuple[float, float]:
     # Response rate
     rr = signals.get('recruiter_response_rate', 0.5)
 
-    # Notice period (<30 days preferred, >90 days penalised)
+    # Notice period (using config thresholds)
     notice = signals.get('notice_period_days', 60)
-    notice_score = 1.0 if notice <= 15 else 0.85 if notice <= 30 else 0.60 if notice <= 60 else 0.35
+    notice_thresholds = config.notice_period_thresholds
+    notice_score = 1.0 if notice <= notice_thresholds['excellent'] else \
+                    0.85 if notice <= notice_thresholds['good'] else \
+                    0.60 if notice <= notice_thresholds['fair'] else 0.35
 
     # Interview completion
     icr = signals.get('interview_completion_rate', 0.5)
@@ -227,13 +229,14 @@ def score_behavioral(signals: dict) -> tuple[float, float]:
     score = (0.35 * recency + 0.30 * rr + 0.20 * notice_score + 0.15 * icr) + open_bonus
     score = min(score, 1.0)
 
-    # Multiplier — severely penalise ghosts and non-responders
-    if days_inactive > 365:
-        mult = 0.10
-    elif days_inactive > 180:
-        mult = 0.30
-    elif rr < 0.05:
-        mult = 0.40
+    # Multiplier — severely penalise ghosts and non-responders (using config)
+    multipliers = config.behavioral_multipliers
+    if days_inactive > config.inactive_severe_threshold:
+        mult = multipliers['inactive_severe']
+    elif days_inactive > config.inactive_moderate_threshold:
+        mult = multipliers['inactive_moderate']
+    elif rr < config.response_rate_threshold:
+        mult = multipliers['low_response']
     else:
         mult = 1.0
 
@@ -255,11 +258,13 @@ def score_location(profile: dict, signals: dict) -> float:
 def score_github(signals: dict) -> float:
     """GitHub activity as a coding-hygiene proxy for an AI engineer."""
     gh = signals.get('github_activity_score', -1)
-    if gh == -1:   return 0.25   # No GitHub = mild concern for engineering role
-    elif gh >= 70: return 1.00
-    elif gh >= 50: return 0.80
-    elif gh >= 30: return 0.60
-    elif gh >= 10: return 0.40
+    thresholds = config.github_thresholds
+    
+    if gh == -1:   return thresholds['no_github']
+    elif gh >= thresholds['excellent']: return 1.00
+    elif gh >= thresholds['good']: return 0.80
+    elif gh >= thresholds['fair']: return 0.60
+    elif gh >= thresholds['poor']: return 0.40
     else:          return 0.20
 
 
@@ -290,14 +295,6 @@ def score_skills_with_assessment(skills: list, signals: dict, tier: str) -> floa
     return min(combined_score, 1.0)
 
 
-CORE_JD_SEMANTIC_KEYWORDS = [
-    'retrieval', 'ranking', 'recommendation', 'search', 'dense retrieval', 
-    'hybrid search', 'hybrid retrieval', 'vector search', 'embeddings', 
-    'sentence transformers', 'bm25', 'information retrieval', 'learning to rank', 
-    'ltr', 'reranking', 'ndcg', 'mrr', 'map', 'evaluat', 'ab test', 'a/b test',
-    'pinecone', 'weaviate', 'qdrant', 'milvus', 'faiss', 'chroma'
-]
-
 def score_jd_semantic_fit(candidate: dict) -> float:
     """Evaluates the semantic fit of the candidate's headline, summary, and career description."""
     profile = candidate.get('profile', {})
@@ -325,14 +322,11 @@ def score_jd_semantic_fit(candidate: dict) -> float:
     return 0.60 * unique_ratio + 0.40 * freq_score
 
 
-PENALTY_DOMAINS = [
-    'computer vision', 'computervision', 'speech recognition', 'robotics', 
-    'image classification', 'object detection', 'text-to-speech', 'text to speech', 
-    'tts', 'lidar', 'autonomous vehicles', 'autonomous driving'
-]
-
 def get_domain_penalty_multiplier(candidate: dict) -> float:
     """Returns a multiplier (0.5 or 1.0) if candidate is from a disqualifying/irrelevant domain."""
+    if not config.enable_domain_penalties:
+        return 1.0
+        
     profile = candidate.get('profile', {})
     headline = (profile.get('headline') or '').lower()
     summary = (profile.get('summary') or '').lower()
@@ -340,7 +334,7 @@ def get_domain_penalty_multiplier(candidate: dict) -> float:
     
     text = f"{headline} {summary} {title}"
     
-    penalty_hits = sum(1 for d in PENALTY_DOMAINS if d in text)
+    penalty_hits = sum(1 for d in config.penalty_domains if d in text)
     if penalty_hits >= 1:
         search_hits = sum(1 for kw in ['search', 'retrieval', 'recommend', 'ranking'] if kw in text)
         if search_hits < 2:
@@ -395,16 +389,29 @@ def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
 
 # ── MAIN SCORER ───────────────────────────────────────────────────────────────
 
-WEIGHTS = {
-    'career_quality': 0.20,
-    'skills_depth': 0.22,
-    'jd_semantic_fit': 0.15,
-    'title_alignment': 0.15,
-    'experience_range': 0.10,
-    'behavioral_availability': 0.10,
-    'location_fit': 0.04,
-    'github_signal': 0.04,
-}
+WEIGHTS = config.weights
+
+# Global JD data (can be updated dynamically)
+PARSED_JD: Optional[ParsedJobDescription] = None
+
+def update_jd_keywords(jd: ParsedJobDescription):
+    """Update global JD keywords based on parsed job description."""
+    global PARSED_JD, CORE_JD_SEMANTIC_KEYWORDS
+    
+    PARSED_JD = jd
+    
+    # Build dynamic keyword list from parsed JD
+    CORE_JD_SEMANTIC_KEYWORDS = jd.required_skills + jd.preferred_skills + jd.domain_keywords
+    
+    # Add standard IR/search keywords if role type matches
+    if any(role in jd.role_type.lower() for role in ['search', 'retrieval', 'recommendation', 'ml', 'ai']):
+        CORE_JD_SEMANTIC_KEYWORDS.extend([
+            'retrieval', 'ranking', 'recommendation', 'search', 'dense retrieval', 
+            'hybrid search', 'hybrid retrieval', 'vector search', 'embeddings', 
+            'sentence transformers', 'bm25', 'information retrieval', 'learning to rank', 
+            'ltr', 'reranking', 'ndcg', 'mrr', 'map', 'evaluat', 'ab test', 'a/b test',
+            'pinecone', 'weaviate', 'qdrant', 'milvus', 'faiss', 'chroma'
+        ])
 
 def compute_score(candidate: dict) -> tuple[float, dict]:
     """Returns (final_score, component_dict). Score 0 = disqualified."""
@@ -486,27 +493,104 @@ def compute_score(candidate: dict) -> tuple[float, dict]:
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Rank candidates for Redrob AI Engineer JD')
+    parser = argparse.ArgumentParser(
+        description='Rank candidates for any job description (dynamic JD support)',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with default JD (hardcoded for AI Engineer role)
+  python rank.py --candidates candidates.jsonl --out submission.csv
+  
+  # Dynamic JD from file
+  python rank.py --candidates candidates.jsonl --jd job_description.txt --out submission.csv
+  
+  # CSV input instead of JSONL
+  python rank.py --candidates candidates.csv --jd job_description.txt --out submission.csv
+  
+  # Use LLM for JD parsing (requires OPENAI_API_KEY env var)
+  python rank.py --candidates candidates.jsonl --jd job_description.txt --use-llm --out submission.csv
+  
+  # Load from cache if available
+  python rank.py --candidates candidates.jsonl --jd job_description.txt --use-cache --out submission.csv
+        """
+    )
     parser.add_argument('--candidates', default='candidates.jsonl',
-                        help='Path to candidates.jsonl')
+                        help='Path to candidates file (JSONL or CSV)')
+    parser.add_argument('--jd', default=None,
+                        help='Path to job description file (text). If not provided, uses default hardcoded JD')
+    parser.add_argument('--jd-text', default=None,
+                        help='Job description as text string (alternative to --jd file)')
+    parser.add_argument('--use-llm', action='store_true',
+                        help='Use LLM (GPT-4) for JD parsing (requires OPENAI_API_KEY)')
+    parser.add_argument('--use-cache', action='store_true',
+                        help='Use cached ranking if available (saves time)')
     parser.add_argument('--out', default='submission.csv',
-                        help='Output CSV path (your_team_id.csv)')
+                        help='Output CSV path')
     parser.add_argument('--top', type=int, default=100,
                         help='Number of candidates to output (default: 100)')
+    parser.add_argument('--include-components', action='store_true',
+                        help='Include scoring component breakdown in output')
+    parser.add_argument('--enable-semantic-reranking', action='store_true',
+                        help='Enable semantic embeddings reranking for top-K candidates')
+    parser.add_argument('--semantic-top-k', type=int, default=50,
+                        help='Number of top candidates to semantically rerank (default: 50)')
+    parser.add_argument('--semantic-weight', type=float, default=0.3,
+                        help='Weight for semantic score in combined score (default: 0.3)')
     args = parser.parse_args()
 
+    # Parse job description if provided
+    parsed_jd = None
+    if args.jd:
+        print(f'Loading job description from {args.jd}...', flush=True)
+        parsed_jd = parse_jd_from_file(args.jd, use_llm=args.use_llm)
+        update_jd_keywords(parsed_jd)
+        print(f'  Title: {parsed_jd.title}')
+        print(f'  Role Type: {parsed_jd.role_type}')
+        print(f'  Experience Range: {parsed_jd.experience_range[0]}-{parsed_jd.experience_range[1]} years')
+        print(f'  Required Skills: {parsed_jd.required_skills}')
+    elif args.jd_text:
+        print('Parsing job description from text...', flush=True)
+        parsed_jd = parse_jd_from_text(args.jd_text, use_llm=args.use_llm)
+        update_jd_keywords(parsed_jd)
+        print(f'  Title: {parsed_jd.title}')
+        print(f'  Role Type: {parsed_jd.role_type}')
+        print(f'  Experience Range: {parsed_jd.experience_range[0]}-{parsed_jd.experience_range[1]} years')
+        print(f'  Required Skills: {parsed_jd.required_skills}')
+    else:
+        print('Using default hardcoded JD (AI Engineer role)', flush=True)
+
+    # Load candidates
     candidates_path = Path(args.candidates)
     if not candidates_path.exists():
         print(f'ERROR: {args.candidates} not found.', file=sys.stderr)
         sys.exit(1)
 
+    # Check cache first if requested
+    cache_path = Path(args.out).with_suffix('.cache.csv')
+    if args.use_cache and cache_path.exists():
+        print(f'Loading cached ranking from {cache_path}...', flush=True)
+        cached = load_cached_ranking(str(cache_path))
+        if cached:
+            print(f'Loaded {len(cached)} cached candidates', flush=True)
+            # Export to requested output format
+            export_ranked_results(cached, args.out, include_components=args.include_components)
+            print(f'\n[DONE] {args.out} written from cache.')
+            sys.exit(0)
+
     print(f'Loading candidates from {args.candidates}...', flush=True)
-    candidates = []
-    with open(candidates_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                candidates.append(json.loads(line))
+    
+    # Detect file format and load accordingly
+    if candidates_path.suffix == '.csv':
+        candidates = import_candidates_from_csv(str(candidates_path))
+    else:
+        # Assume JSONL
+        candidates = []
+        with open(candidates_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    candidates.append(json.loads(line))
+    
     print(f'Loaded {len(candidates):,} candidates', flush=True)
 
     print('Scoring...', flush=True)
@@ -516,6 +600,19 @@ if __name__ == '__main__':
             print(f' {i:,} done...', flush=True)
         score, components = compute_score(c)
         scored.append((c['candidate_id'], score, components, c))
+
+    # Apply semantic reranking if enabled
+    if args.enable_semantic_reranking and parsed_jd:
+        print(f'[SEMANTIC RERANKING] Top {args.semantic_top_k} candidates...', flush=True)
+        jd_text = parsed_jd.title + ' ' + ' '.join(parsed_jd.required_skills)
+        scored = integrate_semantic_reranking(
+            scored, 
+            jd_text, 
+            enable_semantic=True,
+            top_k=args.semantic_top_k,
+            semantic_weight=args.semantic_weight
+        )
+        print(f'[SEMANTIC RERANKING] Complete', flush=True)
 
     # Sort by score desc, tie-break by candidate_id asc (per spec)
     scored.sort(key=lambda x: (-x[1], x[0]))
@@ -527,23 +624,52 @@ if __name__ == '__main__':
     for rank_idx, (cid, score, components, candidate) in enumerate(top_n):
         rank = rank_idx + 1
         reasoning = generate_reasoning(candidate, score, components)
-        rows.append({
-            'candidate_id': cid,
-            'rank': rank,
-            'score': score,
-            'reasoning': reasoning,
-        })
+        
+        if args.include_components:
+            rows.append({
+                'candidate_id': cid,
+                'rank': rank,
+                'score': score,
+                'reasoning': reasoning,
+                **components
+            })
+        else:
+            rows.append({
+                'candidate_id': cid,
+                'rank': rank,
+                'score': score,
+                'reasoning': reasoning,
+            })
 
     out_path = Path(args.out)
     print(f'Writing {out_path}...', flush=True)
-    with open(out_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(
-            f, fieldnames=['candidate_id', 'rank', 'score', 'reasoning']
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    
+    if args.include_components:
+        fieldnames = ['candidate_id', 'rank', 'score', 'reasoning', 
+                     'career_quality', 'skills_depth', 'jd_semantic_fit',
+                     'title_alignment', 'experience_range', 'behavioral_availability',
+                     'location_fit', 'github_signal']
+        with open(out_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+    else:
+        with open(out_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(
+                f, fieldnames=['candidate_id', 'rank', 'score', 'reasoning']
+            )
+            writer.writeheader()
+            writer.writerows(rows)
 
-    print(f'\n✓ Done. {out_path} written.')
+    # Save cache for future runs
+    save_ranking_cache(rows, str(cache_path), metadata={
+        'jd_title': parsed_jd.title if parsed_jd else 'default',
+        'timestamp': str(date.today()),
+        'candidates_file': str(candidates_path),
+    })
+
+    print(f'\n[DONE] {out_path} written.')
+    print(f'[CACHE] Saved to {cache_path}')
     print(f'\nTop 5 candidates:')
     for r in rows[:5]:
         print(f" #{r['rank']} {r['candidate_id']} score={r['score']} {r['reasoning'][:80]}...")

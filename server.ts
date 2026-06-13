@@ -15,17 +15,47 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// API Endpoint: Retrieve candidates dynamically from candidates.jsonl
-app.get('/api/candidates', async (req: Request, res: Response) => {
-  try {
-    const candidatesPath = path.join(process.cwd(), 'candidates.jsonl');
-    if (!fs.existsSync(candidatesPath)) {
-      console.warn("candidates.jsonl not found on disk. Client should fall back to internal mock list.");
-      return res.status(200).json({ candidates: [] });
+// Helper function to parse CSV line with quoted field support
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote inside quoted field
+        current += '"';
+        i++;
+      } else {
+        // Toggle quote state
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // Field separator
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
     }
+  }
+  
+  // Add last field
+  result.push(current.trim());
+  
+  return result;
+}
 
-    const candidates: any[] = [];
-    const fileStream = fs.createReadStream(candidatesPath);
+// Helper function to read candidates from file (JSONL or CSV)
+async function readCandidatesFromFile(filePath: string): Promise<any[]> {
+  const candidates: any[] = [];
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.jsonl') {
+    const fileStream = fs.createReadStream(filePath);
     const rl = readline.createInterface({
       input: fileStream,
       crlfDelay: Infinity
@@ -36,15 +66,135 @@ app.get('/api/candidates', async (req: Request, res: Response) => {
         try {
           candidates.push(JSON.parse(line));
         } catch (e) {
-          // Ignore parse errors on individual malformed lines
+          console.warn("Failed to parse line in JSONL file:", e);
         }
       }
     }
+  } else if (ext === '.csv') {
+    // Parse CSV file
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const lines = fileContent.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      console.warn("CSV file is empty or has no data rows");
+      return candidates;
+    }
+    
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCSVLine(lines[i]);
+      if (values.length !== headers.length) {
+        console.warn(`Skipping malformed CSV row ${i + 1}`);
+        continue;
+      }
+      
+      const row: any = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index];
+      });
+      
+      // Convert CSV row to candidate format matching csv_utils.py
+      try {
+        const candidate: any = {
+          candidate_id: row.candidate_id || '',
+          profile: {
+            name: row.name || '',
+            current_title: row.current_title || '',
+            current_company: row.current_company || '',
+            headline: row.headline || '',
+            summary: row.summary || '',
+            years_of_experience: parseFloat(row.years_of_experience || '0'),
+            location: row.location || '',
+            country: row.country || '',
+          },
+          skills: JSON.parse(row.skills_json || '[]'),
+          career_history: JSON.parse(row.career_json || '[]'),
+          education: JSON.parse(row.education_json || '[]'),
+          certifications: JSON.parse(row.certifications_json || '[]'),
+          redrob_signals: JSON.parse(row.signals_json || '{}'),
+        };
+        candidates.push(candidate);
+      } catch (e) {
+        console.warn(`Failed to parse CSV row ${i + 1}:`, e);
+      }
+    }
+  } else {
+    console.warn(`Unsupported file format: ${ext}`);
+  }
 
+  return candidates;
+}
+
+// API Endpoint: Retrieve candidates dynamically from file
+app.get('/api/candidates', async (req: Request, res: Response) => {
+  try {
+    // Support dynamic file path via query parameter
+    const filePath = req.query.file as string || 'candidates.jsonl';
+    const candidatesPath = path.join(process.cwd(), filePath);
+    
+    if (!fs.existsSync(candidatesPath)) {
+      console.warn(`${filePath} not found on disk. Client should fall back to internal mock list.`);
+      return res.status(200).json({ candidates: [] });
+    }
+
+    const candidates = await readCandidatesFromFile(candidatesPath);
     return res.status(200).json({ candidates });
   } catch (err: any) {
-    console.error("Failed to parse candidates.jsonl server-side:", err);
+    console.error("Failed to parse candidates file server-side:", err);
     return res.status(500).json({ error: "Failed to read candidates database." });
+  }
+});
+
+// API Endpoint: Upload and parse job description file
+app.post('/api/upload-jd', async (req: Request, res: Response) => {
+  try {
+    const { jdText, jdFile } = req.body;
+    
+    if (jdText) {
+      // Direct JD text provided
+      return res.status(200).json({ jdText, source: 'text' });
+    }
+    
+    if (jdFile) {
+      // JD file path provided
+      const jdPath = path.join(process.cwd(), jdFile);
+      if (!fs.existsSync(jdPath)) {
+        return res.status(404).json({ error: "Job description file not found" });
+      }
+      
+      const jdText = fs.readFileSync(jdPath, 'utf-8');
+      return res.status(200).json({ jdText, source: 'file' });
+    }
+    
+    return res.status(400).json({ error: "No JD text or file provided" });
+  } catch (err: any) {
+    console.error("Failed to process job description:", err);
+    return res.status(500).json({ error: "Failed to process job description" });
+  }
+});
+
+// API Endpoint: Upload candidate file
+app.post('/api/upload-candidates', async (req: Request, res: Response) => {
+  try {
+    const { filePath } = req.body;
+    
+    if (!filePath) {
+      return res.status(400).json({ error: "No file path provided" });
+    }
+    
+    const candidatesPath = path.join(process.cwd(), filePath);
+    if (!fs.existsSync(candidatesPath)) {
+      return res.status(404).json({ error: "Candidate file not found" });
+    }
+    
+    const candidates = await readCandidatesFromFile(candidatesPath);
+    return res.status(200).json({ candidates, source: filePath });
+  } catch (err: any) {
+    console.error("Failed to process candidate file:", err);
+    return res.status(500).json({ error: "Failed to process candidate file" });
   }
 });
 

@@ -11,11 +11,11 @@ from pathlib import Path
 
 def validate_csv(csv_path: Path):
     print(f"==================================================")
-    print(f"🔍 Validating Track 01 Submission: {csv_path.name}")
+    print(f"[VALIDATING] Track 01 Submission: {csv_path.name}")
     print(f"==================================================")
 
     if not csv_path.exists():
-        print(f"❌ ERROR: File does not exist: {csv_path}")
+        print(f"[ERROR] File does not exist: {csv_path}")
         return False
 
     required_headers = ["candidate_id", "rank", "score", "reasoning"]
@@ -28,7 +28,7 @@ def validate_csv(csv_path: Path):
             # Check for empty file
             first_char = f.read(1)
             if not first_char:
-                print("❌ ERROR: File is empty.")
+                print("[ERROR] File is empty.")
                 return False
             f.seek(0)
 
@@ -36,7 +36,7 @@ def validate_csv(csv_path: Path):
             
             # Check CSV headers exactly
             if not reader.fieldnames:
-                print("❌ ERROR: No headers found.")
+                print("[ERROR] No headers found.")
                 return False
                 
             headers_cleaned = [h.strip() for h in reader.fieldnames]
@@ -119,21 +119,21 @@ def validate_csv(csv_path: Path):
                 warnings.append(f"Total entries: {row_count}. The competition evaluation standard recommends exactly 100 candidate recommendations.")
 
     except Exception as e:
-        print(f"❌ FATAL ERROR during read: {e}")
+        print(f"[FATAL ERROR] during read: {e}")
         return False
 
     # Output report
     if errors:
-        print(f"\n❌ FAILED: Found {len(errors)} errors and {len(warnings)} warnings.")
+        print(f"\n[FAILED] Found {len(errors)} errors and {len(warnings)} warnings.")
         for err in errors[:10]:
             print(f" - [ERROR] {err}")
         if len(errors) > 10:
             print(f" ... and {len(errors) - 10} more errors.")
         return False
     else:
-        print(f"\n✅ SUCCESS: File '{csv_path.name}' is highly compliant with Track 01 rules!")
+        print(f"\n[SUCCESS] File '{csv_path.name}' is highly compliant with Track 01 rules!")
         if warnings:
-            print(f"⚠️  Warnings ({len(warnings)}):")
+            print(f"[WARNINGS] ({len(warnings)}):")
             for warn in warnings[:5]:
                 print(f" - [WARNING] {warn}")
             if len(warnings) > 5:

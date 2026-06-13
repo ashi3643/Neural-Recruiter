@@ -1,9 +1,17 @@
 # NeuralRecruiter Track 01 Ranker Dependencies
 #
-# This ranking pipeline is optimized for high performance on standard CPUs
-# and operates fully offline. It consumes zero network calls or external APIs,
-# executing strictly with the Python standard library.
+# Core ranking pipeline operates with Python standard library only.
+# Optional features require additional packages.
 #
 # Requirements:
 # - Python >= 3.10 (tested with 3.10, 3.11, 3.12, 3.13)
-# - No external pip packages required.
+#
+# Core functionality: PyYAML for config loading
+# Optional LLM JD parsing: openai>=1.0.0
+# Optional semantic reranking: sentence-transformers>=2.2.0
+
+PyYAML>=6.0
+
+# Optional dependencies (uncomment to use):
+# openai>=1.0.0
+# sentence-transformers>=2.2.0

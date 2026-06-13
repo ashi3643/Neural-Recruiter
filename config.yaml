@@ -1,0 +1,297 @@
+# Neural Recruiter Configuration
+# This file contains all configurable parameters for the ranking engine.
+# Modify these values to adapt the system for different roles, industries, or requirements.
+
+# System Configuration
+system:
+  # Current date for experience calculations and timeline validation
+  current_date: "2026-06-11"
+  
+  # Mode: "demo" for synthetic candidates, "submission" for official evaluation
+  mode: "submission"
+  
+  # Enable/disable features
+  enable_honeypot_detection: true
+  enable_domain_penalties: true
+  enable_consulting_penalties: true
+
+# Scoring Weights (must sum to 1.0)
+weights:
+  career_quality: 0.20
+  skills_depth: 0.22
+  jd_semantic_fit: 0.15
+  title_alignment: 0.15
+  experience_range: 0.10
+  behavioral_availability: 0.10
+  location_fit: 0.04
+  github_signal: 0.04
+
+# Title Tiering
+title_tiers:
+  # Tier A: Core AI/ML/Search roles (full scoring eligibility)
+  tier_a:
+    - "ml engineer"
+    - "machine learning engineer"
+    - "senior machine learning engineer"
+    - "ai engineer"
+    - "senior ai engineer"
+    - "applied scientist"
+    - "applied ml engineer"
+    - "applied ai engineer"
+    - "nlp engineer"
+    - "search engineer"
+    - "ranking engineer"
+    - "retrieval engineer"
+    - "recommendations engineer"
+    - "recommendation systems engineer"
+    - "research engineer"
+    - "ai research engineer"
+    - "deep learning engineer"
+    - "data scientist"
+    - "senior data scientist"
+    - "principal data scientist"
+    - "staff machine learning engineer"
+    - "junior ml engineer"
+    - "ml researcher"
+  
+  # Tier C: Non-technical keyword stuffers (hard suppression)
+  tier_c:
+    - "hr manager"
+    - "hr executive"
+    - "human resources"
+    - "recruitment manager"
+    - "operations manager"
+    - "operations executive"
+    - "content writer"
+    - "copywriter"
+    - "accountant"
+    - "financial analyst"
+    - "finance manager"
+    - "civil engineer"
+    - "mechanical engineer"
+    - "electrical engineer"
+    - "marketing manager"
+    - "marketing executive"
+    - "digital marketing"
+    - "sales executive"
+    - "sales manager"
+    - "business development"
+    - "graphic designer"
+    - "ui designer"
+    - "ux designer"
+    - "customer support"
+    - "customer success"
+    - "business analyst"
+    - "project manager"
+
+# Consulting Firms (penalty list)
+consulting_firms:
+  - "tcs"
+  - "tata consultancy"
+  - "infosys"
+  - "wipro"
+  - "accenture"
+  - "cognizant"
+  - "capgemini"
+  - "hcl technologies"
+  - "hcltech"
+  - "tech mahindra"
+  - "mphasis"
+  - "ltimindtree"
+  - "mindtree"
+  - "l&t infotech"
+  - "hexaware"
+  - "niit technologies"
+  - "mastech"
+  - "syntel"
+  - "zensar"
+  - "birlasoft"
+  - "infosonics"
+  - "sonata software"
+  - "genpact"
+  - "deloitte"
+  - "ey"
+  - "ernst & young"
+  - "pwc"
+  - "kpmg"
+  - "cognizant technology solutions"
+
+# Core AI/ML Skills (for skill scoring)
+core_ai_skills:
+  # Vector/semantic retrieval
+  - "sentence transformers"
+  - "sentence-transformers"
+  - "embeddings"
+  - "text embeddings"
+  - "dense retrieval"
+  - "semantic search"
+  - "vector search"
+  - "vector similarity"
+  
+  # Vector DBs
+  - "faiss"
+  - "pinecone"
+  - "qdrant"
+  - "weaviate"
+  - "milvus"
+  - "opensearch"
+  - "elasticsearch"
+  - "chroma"
+  - "pgvector"
+  - "redis vector"
+  
+  # Retrieval / ranking systems
+  - "rag"
+  - "retrieval augmented generation"
+  - "hybrid retrieval"
+  - "bm25"
+  - "information retrieval"
+  - "ranking system"
+  - "recommendation system"
+  - "learning to rank"
+  - "ltr"
+  - "lambdamart"
+  - "reranking"
+  
+  # Evaluation
+  - "ndcg"
+  - "mrr"
+  - "map"
+  - "precision@k"
+  - "recall@k"
+  - "ranking evaluation"
+  
+  # Core ML frameworks
+  - "pytorch"
+  - "tensorflow"
+  - "hugging face"
+  - "transformers"
+  - "bert"
+  - "roberta"
+  
+  # MLOps
+  - "mlflow"
+  - "kubeflow"
+  - "triton"
+  - "torchserve"
+  - "bentoml"
+
+# Default JD Semantic Keywords (used when no JD is provided)
+default_jd_semantic_keywords:
+  - "retrieval"
+  - "ranking"
+  - "recommendation"
+  - "search"
+  - "dense retrieval"
+  - "hybrid search"
+  - "hybrid retrieval"
+  - "vector search"
+  - "embeddings"
+  - "sentence transformers"
+  - "bm25"
+  - "information retrieval"
+  - "learning to rank"
+  - "ltr"
+  - "reranking"
+  - "ndcg"
+  - "mrr"
+  - "map"
+  - "evaluat"
+  - "ab test"
+  - "a/b test"
+  - "pinecone"
+  - "weaviate"
+  - "qdrant"
+  - "milvus"
+  - "faiss"
+  - "chroma"
+
+# Domain Penalties (wrong-domain AI specialists)
+penalty_domains:
+  - "computer vision"
+  - "computervision"
+  - "speech recognition"
+  - "robotics"
+  - "image classification"
+  - "object detection"
+  - "text-to-speech"
+  - "text to speech"
+  - "tts"
+  - "lidar"
+  - "autonomous vehicles"
+  - "autonomous driving"
+
+# Preferred Locations
+preferred_locations:
+  - "pune"
+  - "noida"
+  - "bengaluru"
+  - "bangalore"
+  - "hyderabad"
+  - "mumbai"
+  - "delhi"
+  - "gurgaon"
+  - "gurugram"
+  - "ncr"
+  - "new delhi"
+  - "chennai"
+  - "kolkata"
+  - "ahmedabad"
+  - "india"
+
+# Honeypot Detection Thresholds
+honeypot:
+  # Career duration vs stated experience tolerance (percentage)
+  career_duration_tolerance: 0.35
+  
+  # Minimum career months to check timeline paradox
+  minimum_career_months: 24
+  
+  # Number of expert skills with 0 months duration to trigger honeypot
+  expert_zero_threshold: 3
+  
+  # Number of expert skills with low endorsements to trigger honeypot
+  expert_skills_threshold: 8
+  expert_endorsements_threshold: 5
+
+# Experience Scoring (default ranges if not in JD)
+experience:
+  default_min_years: 6
+  default_max_years: 8
+  sweet_spot_bonus: 1.0
+  adjacent_bonus: 0.85
+  moderate_penalty: 0.65
+  severe_penalty: 0.20
+
+# Behavioral Scoring
+behavioral:
+  # Inactivity thresholds (days)
+  inactive_severe: 365
+  inactive_moderate: 180
+  
+  # Response rate threshold for multiplier
+  response_rate_threshold: 0.05
+  
+  # Notice period scoring (days)
+  notice_period_excellent: 15
+  notice_period_good: 30
+  notice_period_fair: 60
+  
+  # Multipliers
+  inactive_severe_multiplier: 0.10
+  inactive_moderate_multiplier: 0.30
+  low_response_multiplier: 0.40
+
+# GitHub Activity Scoring
+github:
+  no_github_score: 0.25
+  excellent_threshold: 70
+  good_threshold: 50
+  fair_threshold: 30
+  poor_threshold: 10
+
+# Output Configuration
+output:
+  default_top_n: 100
+  include_components: false
+  save_cache: true
