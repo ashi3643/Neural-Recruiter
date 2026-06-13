@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Recruiter: Intelligent Candidate Discovery</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; }
+        .slide {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px;
+            page-break-after: always;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .slide.alt { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .slide.light { background: white; color: #333; }
+        .slide.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .slide h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        .slide h2 {
+            font-size: 2.8em;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .slide h3 {
+            font-size: 1.8em;
+            margin: 20px 0 15px 0;
+            font-weight: 600;
+        }
+        .slide p {
+            font-size: 1.4em;
+            line-height: 1.8;
+            margin-bottom: 20px;
+        }
+        .slide ul, .slide ol {
+            font-size: 1.3em;
+            text-align: left;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        .slide li {
+            margin: 12px 0;
+            line-height: 1.6;
+        }
+        .slide strong { font-weight: 700; }
+        .slide .subtitle {
+            font-size: 1.8em;
+            margin-top: 30px;
+            opacity: 0.95;
+        }
+        .slide .highlight {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .slide.light .highlight {
+            background: rgba(102, 126, 234, 0.1);
+        }
+        .slide .stat-box {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px 40px;
+            margin: 10px;
+            border-radius: 8px;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+        .slide.light .stat-box {
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+        }
+        .slide .pipeline {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        .slide .stage {
+            background: rgba(255, 255, 255, 0.25);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            flex: 0 1 200px;
+        }
+        .slide.light .stage {
+            background: rgba(102, 126, 234, 0.2);
+        }
+        @media print {
+            body { background: white; }
+            .slide { page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Slide 1: Title Slide -->
+<div class="slide alt">
+    <h1>🧠 Neural Recruiter</h1>
+    <p class="subtitle">Intelligent Candidate Discovery & Ranking</p>
+    <p style="font-size: 1.5em; margin-top: 50px;">Track 01 | Data & AI Challenge</p>
+    <p style="font-size: 1.2em; margin-top: 30px;">Team: Intelligent Recruiters</p>
+    <p style="font-size: 1.1em; opacity: 0.9;">Beyond Keywords. Beyond Filters. Pure Relevance.</p>
+</div>
+
+<!-- Slide 2: The Problem -->
+<div class="slide blue">
+    <h2>The Problem</h2>
+    <div class="highlight">
+        <p><strong>Recruiters lose hidden talent in the noise.</strong></p>
+    </div>
+    <ul style="margin-top: 40px;">
+        <li>❌ Keyword matching misses contextual fit</li>
+        <li>❌ Behavioral signals are invisible to traditional filters</li>
+        <li>❌ Manual screening of 100K+ profiles is impossible</li>
+        <li>❌ Career trajectory and intent remain hidden</li>
+    </ul>
+    <p style="margin-top: 50px; font-size: 1.3em;"><strong>We built an AI brain that sees what humans see — but at scale.</strong></p>
+</div>
+
+<!-- Slide 3: Our Solution -->
+<div class="slide light">
+    <h2>Our Solution: 4-Stage Pipeline</h2>
+    <div class="pipeline">
+        <div class="stage">🔍 Honeypot Detection</div>
+        <div class="stage">⛔ Tier Gating</div>
+        <div class="stage">📊 Multi-Signal Scoring</div>
+        <div class="stage">⚖️ Penalties & Multipliers</div>
+    </div>
+    <div class="highlight">
+        <h3 style="color: #667eea;">Multi-Dimension Ranking Engine</h3>
+        <p style="color: #333;">Analyzes 8 signals across career, skills, JD fit, behavior, and activity to rank 100K candidates in 60-90 seconds.</p>
+    </div>
+</div>
+
+<!-- Slide 4: The 8 Signals -->
+<div class="slide">
+    <h2>8 Signals Driving Relevance</h2>
+    <ul>
+        <li>📈 <strong>Career Progression (20%)</strong> — Role growth, seniority climb, lateral moves</li>
+        <li>🎯 <strong>Skills Match (22%)</strong> — Semantic + exact skill alignment to JD</li>
+        <li>📄 <strong>JD Fit (15%)</strong> — Deep semantic understanding of job requirements</li>
+        <li>🏆 <strong>Title Tier (15%)</strong> — Seniority alignment &amp; tier gating</li>
+        <li>⏳ <strong>Experience (10%)</strong> — Years in role, depth, breadth</li>
+        <li>🤝 <strong>Behavioral (10%)</strong> — Response rates, activity patterns</li>
+        <li>📍 <strong>Location (4%)</strong> — Geography relevance, mobility</li>
+        <li>🐙 <strong>GitHub Signal (4%)</strong> — Developer activity, contribution frequency</li>
+    </ul>
+    <p style="margin-top: 40px;"><strong>Total: 1.0 (100%)</strong></p>
+</div>
+
+<!-- Slide 5: Pipeline Stages Deep Dive -->
+<div class="slide light">
+    <h2>Pipeline: Stage by Stage</h2>
+    <div class="highlight" style="text-align: left;">
+        <p><strong>Stage 1 | Honeypot &amp; Timeline Detection</strong><br/>
+        Filter out fake profiles &amp; resume paradoxes (graduation dates, conflicting timelines)</p>
+        <p style="margin-top: 15px;"><strong>Stage 2 | Tier Gating</strong><br/>
+        Suppress Tier C (junior) candidates if role demands Tier A/B (mid/senior)</p>
+        <p style="margin-top: 15px;"><strong>Stage 3 | Weighted Scoring</strong><br/>
+        Apply 8 signals with configurable weights; compute 0-1 normalized scores</p>
+        <p style="margin-top: 15px;"><strong>Stage 4 | Multipliers &amp; Penalties</strong><br/>
+        Boost strong matches, penalize weak fit; finalize top 100 shortlist</p>
+    </div>
+</div>
+
+<!-- Slide 6: Key Results -->
+<div class="slide alt">
+    <h2>Results &amp; Performance</h2>
+    <div class="stat-box">100K Candidates</div>
+    <div class="stat-box">60-90 Seconds</div>
+    <div class="stat-box">Zero Dependencies</div>
+    <br/>
+    <div class="highlight">
+        <h3>Top 5 Candidates (Sample Output)</h3>
+        <p style="font-size: 1.1em; margin-top: 15px;">
+            🥇 <strong>#1:</strong> Senior ML Engineer (7.2y) | Score: 0.9857<br/>
+            🥈 <strong>#2:</strong> Search Engineer (7.6y) | Score: 0.9681<br/>
+            🥉 <strong>#3:</strong> Senior NLP Engineer (7.8y) | Score: 0.9666
+        </p>
+    </div>
+    <p style="margin-top: 30px;"><strong>Output Format:</strong> CSV with candidate_id, rank, score, reasoning</p>
+</div>
+
+<!-- Slide 7: Technical Stack -->
+<div class="slide blue">
+    <h2>Technical Stack</h2>
+    <div class="highlight">
+        <h3>Backend Ranking Engine</h3>
+        <p>Pure Python 3.10+ (zero external dependencies) | ~500 LOC | Multi-threaded processing</p>
+    </div>
+    <div class="highlight">
+        <h3>Frontend Sandbox</h3>
+        <p>React 19 + TypeScript | Vite 6 | TailwindCSS 4 | Live weight calibration &amp; export</p>
+    </div>
+    <div class="highlight">
+        <h3>Reproducibility</h3>
+        <p><code>python rank.py --candidates &lt;dataset&gt; --out submission.csv</code></p>
+    </div>
+</div>
+
+<!-- Slide 8: Why This Approach -->
+<div class="slide">
+    <h2>Why This Approach Wins</h2>
+    <ul>
+        <li>✅ <strong>Semantic Understanding:</strong> Beyond keywords to true relevance</li>
+        <li>✅ <strong>Explainable Ranking:</strong> Every candidate has clear reasoning</li>
+        <li>✅ <strong>Configurable Weights:</strong> Adjust 8 signals for different roles</li>
+        <li>✅ <strong>Fast &amp; Deterministic:</strong> Runs in under 2 minutes on 100K profiles</li>
+        <li>✅ <strong>Production-Ready:</strong> No ML framework bloat, pure algorithmic power</li>
+        <li>✅ <strong>Scalable:</strong> Proven on 100K+ candidates; runs locally on CPU</li>
+    </ul>
+    <p style="margin-top: 50px; font-size: 1.3em;"><strong>The result: Recruiters get a curated, ranked shortlist they can trust.</strong></p>
+</div>
+
+</body>
+</html>
