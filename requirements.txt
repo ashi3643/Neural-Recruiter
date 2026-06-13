@@ -1,17 +1,18 @@
 # NeuralRecruiter Track 01 Ranker Dependencies
 #
 # Core ranking pipeline operates with Python standard library only.
-# Optional features require additional packages.
+# AI-powered features require additional packages.
 #
 # Requirements:
 # - Python >= 3.10 (tested with 3.10, 3.11, 3.12, 3.13)
 #
 # Core functionality: PyYAML for config loading
+# Semantic embeddings: sentence-transformers>=2.2.0 (required for AI scoring)
 # Optional LLM JD parsing: openai>=1.0.0
-# Optional semantic reranking: sentence-transformers>=2.2.0
 
 PyYAML>=6.0
+sentence-transformers>=2.2.0
+numpy>=1.24.0
 
 # Optional dependencies (uncomment to use):
 # openai>=1.0.0
-# sentence-transformers>=2.2.0

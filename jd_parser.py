@@ -68,6 +68,8 @@ class JDParser:
     def parse(self, job_description: str) -> ParsedJobDescription:
         """
         Parse a job description into structured requirements.
+        Uses LLM parsing by default for true semantic understanding,
+        with rule-based fallback if LLM unavailable.
         
         Args:
             job_description: Raw job description text
@@ -75,10 +77,15 @@ class JDParser:
         Returns:
             ParsedJobDescription with structured requirements
         """
-        if self.use_llm and self.api_key:
-            return self._parse_with_llm(job_description)
-        else:
-            return self._parse_with_rules(job_description)
+        # Try LLM parsing first (AI-powered approach)
+        if self.api_key:
+            try:
+                return self._parse_with_llm(job_description)
+            except Exception as e:
+                print(f"[JD PARSER] LLM parsing failed: {e}, falling back to rule-based parsing")
+        
+        # Fallback to rule-based parsing
+        return self._parse_with_rules(job_description)
     
     def _parse_with_rules(self, jd_text: str) -> ParsedJobDescription:
         """Parse JD using rule-based extraction."""

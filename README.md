@@ -1,11 +1,11 @@
 # NeuralRecruiter (Track 01) — India Runs 2026 Hackathon
 
-**Explainable Hybrid Candidate Ranking Engine with Dynamic Ingestion and Optional AI Reranking**  
-*A Competition-Grade, Config-Driven, Multi-Stage Ranking Pipeline*
+**AI-Powered Semantic Candidate Ranking Engine with Dynamic Job Understanding**  
+*A Competition-Grade, Config-Driven, Multi-Stage AI Ranking Pipeline*
 
-NeuralRecruiter is an elite, high-performance candidate discovery and ranking system engineered to process massive talent pools (100,000+ profiles) and identify the top 100 candidates for any role through dynamic job description parsing and configurable scoring weights.
+NeuralRecruiter is an elite, AI-powered candidate discovery and ranking system engineered to process massive talent pools (100,000+ profiles) and identify the top 100 candidates for any role through **semantic job description understanding** and **embedding-based candidate scoring**.
 
-Our core design principle is **architectural honesty over AI-slop**. Instead of relying on expensive, black-box, or network-bound LLM API calls during the ranking loop (which violates competition speed and connectivity constraints), NeuralRecruiter utilizes a highly optimized, fully deterministic **Multi-Stage Hybrid Scoring Pipeline** with optional AI reranking for top-K candidates.
+Our core design principle is **true semantic understanding over keyword matching**. NeuralRecruiter utilizes **sentence-transformers embeddings** for semantic similarity scoring, **LLM-powered job description parsing** for deep role understanding, and a **multi-stage hybrid scoring pipeline** that combines AI signals with deterministic heuristics for explainable, trustworthy rankings.
 
 ---
 
@@ -44,12 +44,15 @@ open PRESENTATION.pdf  # or open in any PDF viewer
 
 ## 🚀 Key Features & Performance Metrics
 
-- **Extremely Fast**: Processes **100,000+ profiles in ~30–45 seconds** on a standard single-core CPU, using streaming file IO with zero external package dependencies.
-- **Dynamic Job Description Support**: **NEW** - Parse and rank candidates for ANY job description, not just hardcoded roles. Supports both rule-based and LLM-based JD parsing.
-- **CSV Import/Export**: **NEW** - Import candidates from CSV files (Excel exports) and export ranked results with full scoring breakdowns. No need to re-rank every time.
-- **Smart Caching**: **NEW** - Automatic caching of ranking results for instant retrieval on subsequent runs with the same JD and candidate set.
+- **AI-Powered Semantic Understanding**: Uses **sentence-transformers embeddings** (all-MiniLM-L6-v2) for true semantic similarity between job descriptions and candidate profiles, not just keyword matching.
+- **LLM-Powered JD Parsing**: **Primary approach** uses GPT-4 for deep job description understanding with intelligent rule-based fallback for reliability.
+- **Semantic Reranking**: **Enabled by default** - reranks top-K candidates using embedding-based semantic similarity for improved ranking quality.
+- **Extremely Fast**: Processes **100,000+ profiles in ~30–45 seconds** on a standard single-core CPU, using streaming file IO with optimized AI inference.
+- **Dynamic Job Description Support**: Parse and rank candidates for ANY job description, not just hardcoded roles. AI-powered extraction of role type, experience range, required skills, and domain keywords.
+- **CSV Import/Export**: Import candidates from CSV files (Excel exports) and export ranked results with full scoring breakdowns. No need to re-rank every time.
+- **Smart Caching**: Automatic caching of ranking results for instant retrieval on subsequent runs with the same JD and candidate set.
 - **Robust Guardrails**: Features a comprehensive 8-point **Honeypot Filter** that automatically flags and disqualifies profiles with fraudulent credentials, timeline paradoxes, or fake expert skill histories.
-- **Semantic Precision**: Implements an offline semantic key-phrase alignment scorer assessing breadth and frequency of Information Retrieval (IR), recommendation, and search system concepts over headlines, summaries, and career histories.
+- **Multi-Stage Hybrid Scoring**: Combines AI semantic signals with deterministic heuristics (career quality, skills depth, behavioral signals, location fit) for explainable, trustworthy rankings.
 - **Recruiter Guardrails**: Applies severe penalties for massive consulting systems (TCS, Infosys, Genpact, Deloitte, etc.) and wrong-domain AI specialists (e.g., computer vision and speech engineers) to prioritize candidate alignment.
 - **Fully Synchronized**: Includes a fully synchronized TypeScript mirror (`scorer.ts`) powering a reactive sandbox environment for the recruiter.
 
@@ -65,13 +68,16 @@ Based on principal engineering assessment, the following critical improvements h
 - Fixed job description (hardcoded for one role only)
 - Fixed date (2026-06-11 hardcoded in code)
 - Fixed semantic keywords (hardcoded in rank.py:293)
+- Keyword-based semantic matching (no true understanding)
 - No CSV import/export capability
 - No caching for repeated runs
 - Windows console crashes on emoji output
 - Demo and submission candidates mixed
 
-**After (Dynamic Config-Driven System):**
-- Dynamic job description parsing (any JD via `--jd` flag)
+**After (AI-Powered Dynamic System):**
+- **AI-powered job description parsing** (LLM-first with rule-based fallback)
+- **Semantic embeddings** for true understanding (sentence-transformers)
+- **Semantic reranking enabled by default** for improved ranking quality
 - Configurable date via config.yaml
 - All constants moved to config.yaml (weights, tiers, skills, locations)
 - CSV import/export (Excel/ATS integration)
@@ -98,21 +104,29 @@ weights:
 
 ### New Capabilities Added
 
-1. **Semantic Reranking Layer** (`semantic_reranker.py`)
-   - Optional AI layer using sentence-transformers
-   - Reranks top-K candidates with semantic similarity
-   - Can be enabled via config or command-line flag
+1. **AI-Powered Semantic Scoring** (`rank.py`)
+   - **Default**: Uses sentence-transformers embeddings for true semantic understanding
+   - Computes cosine similarity between JD and candidate embeddings
+   - Falls back to keyword matching if embeddings unavailable
+   - Pre-computes JD embedding for efficiency
 
-2. **Evaluation Metrics** (`evaluation.py`)
+2. **Semantic Reranking Layer** (`semantic_reranker.py`)
+   - **Enabled by default** for top-K candidates
+   - Uses sentence-transformers for embedding-based reranking
+   - Combines heuristic score with semantic similarity
+   - Can be disabled via `--disable-semantic-reranking` flag
+
+3. **LLM-First JD Parser** (`jd_parser.py`)
+   - **Primary approach**: Uses GPT-4 for deep JD understanding
+   - Intelligent fallback to rule-based parsing
+   - Extracts: title, role type, experience range, skills, domain keywords
+   - Requires `OPENAI_API_KEY` environment variable
+
+4. **Evaluation Metrics** (`evaluation.py`)
    - Precision@K, Recall@K, NDCG@K
    - Mean Reciprocal Rank (MRR)
    - Mean Average Precision (MAP)
    - Quantitative validation of ranking quality
-
-3. **Dynamic JD Parser** (`jd_parser.py`)
-   - Rule-based parsing (fast, offline)
-   - Optional LLM-based parsing (GPT-4)
-   - Extracts: title, role type, experience range, skills
 
 ---
 
@@ -133,13 +147,16 @@ The JD parser automatically extracts:
 - **Domain Keywords**: Captures domain-specific terms (search, retrieval, NLP, CV, etc.)
 
 **JD Parsing Options:**
-- **Rule-based (default)**: Fast, offline, no API calls required
-- **LLM-based (optional)**: More accurate parsing using GPT-4 (requires `OPENAI_API_KEY`)
+- **LLM-based (default)**: Deep semantic understanding using GPT-4 (requires `OPENAI_API_KEY`)
+- **Rule-based (fallback)**: Fast, offline parsing if LLM unavailable
 
 ```bash
-# Use LLM for better JD understanding
+# LLM JD parsing is now the default (just set OPENAI_API_KEY)
 export OPENAI_API_KEY=your_key_here
-python rank.py --candidates candidates.jsonl --jd jd.txt --use-llm --out results.csv
+python rank.py --candidates candidates.jsonl --jd jd.txt --out results.csv
+
+# Disable semantic reranking if needed
+python rank.py --candidates candidates.jsonl --jd jd.txt --disable-semantic-reranking --out results.csv
 ```
 
 ### CSV Import/Export

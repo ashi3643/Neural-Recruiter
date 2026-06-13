@@ -256,16 +256,56 @@ def score_location(profile: dict, signals: dict) -> float:
 
 
 def score_github(signals: dict) -> float:
-    """GitHub activity as a coding-hygiene proxy for an AI engineer."""
+    """
+    Enhanced GitHub activity scoring as a coding-hygiene proxy for an AI engineer.
+    Considers activity score, repository relevance, and contribution patterns.
+    """
     gh = signals.get('github_activity_score', -1)
     thresholds = config.github_thresholds
     
-    if gh == -1:   return thresholds['no_github']
-    elif gh >= thresholds['excellent']: return 1.00
-    elif gh >= thresholds['good']: return 0.80
-    elif gh >= thresholds['fair']: return 0.60
-    elif gh >= thresholds['poor']: return 0.40
-    else:          return 0.20
+    # Base score from activity level
+    if gh == -1:
+        return thresholds['no_github']
+    elif gh >= thresholds['excellent']:
+        base_score = 1.00
+    elif gh >= thresholds['good']:
+        base_score = 0.80
+    elif gh >= thresholds['fair']:
+        base_score = 0.60
+    elif gh >= thresholds['poor']:
+        base_score = 0.40
+    else:
+        base_score = 0.20
+    
+    # Bonus for relevant repositories (if data available)
+    repo_bonus = 0.0
+    repos = signals.get('github_repositories', [])
+    if repos:
+        # Check for AI/ML relevant repositories
+        ai_keywords = ['machine learning', 'deep learning', 'nlp', 'computer vision', 
+                      'reinforcement learning', 'transformer', 'embedding', 'vector',
+                      'search', 'recommendation', 'retrieval', 'ranking']
+        relevant_repos = sum(1 for repo in repos if any(kw in repo.lower() for kw in ai_keywords))
+        if relevant_repos > 0:
+            repo_bonus = min(relevant_repos * 0.05, 0.15)  # Max 0.15 bonus
+    
+    # Bonus for recent activity (if data available)
+    recent_bonus = 0.0
+    last_commit = signals.get('github_last_commit_date')
+    if last_commit:
+        try:
+            from datetime import datetime
+            last_commit_date = datetime.fromisoformat(last_commit.replace('Z', '+00:00'))
+            days_since_commit = (TODAY - last_commit_date.date()).days
+            if days_since_commit <= 30:
+                recent_bonus = 0.10
+            elif days_since_commit <= 90:
+                recent_bonus = 0.05
+        except Exception:
+            pass
+    
+    final_score = min(base_score + repo_bonus + recent_bonus, 1.0)
+    return final_score
 
 
 def score_skills_with_assessment(skills: list, signals: dict, tier: str) -> float:
@@ -295,8 +335,12 @@ def score_skills_with_assessment(skills: list, signals: dict, tier: str) -> floa
     return min(combined_score, 1.0)
 
 
-def score_jd_semantic_fit(candidate: dict) -> float:
-    """Evaluates the semantic fit of the candidate's headline, summary, and career description."""
+def score_jd_semantic_fit(candidate: dict, use_embeddings: bool = True) -> float:
+    """
+    Evaluates the semantic fit of the candidate's headline, summary, and career description.
+    Uses sentence-transformers embeddings by default for true semantic understanding.
+    Falls back to keyword matching if embeddings unavailable.
+    """
     profile = candidate.get('profile', {})
     headline = (profile.get('headline') or '').lower()
     summary = (profile.get('summary') or '').lower()
@@ -307,7 +351,45 @@ def score_jd_semantic_fit(candidate: dict) -> float:
         title = (role.get('title') or '').lower()
         desc = (role.get('description') or '').lower()
         text += f" {title} {desc}"
-        
+    
+    # Try semantic embeddings first (AI-powered approach)
+    if use_embeddings:
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            
+            # Load model lazily (only when needed)
+            if not hasattr(score_jd_semantic_fit, '_model'):
+                score_jd_semantic_fit._model = SentenceTransformer('all-MiniLM-L6-v2')
+                # Pre-compute JD embedding if available
+                if PARSED_JD:
+                    jd_text = PARSED_JD.title + ' ' + ' '.join(PARSED_JD.required_skills)
+                    score_jd_semantic_fit._jd_embedding = score_jd_semantic_fit._model.encode(jd_text)
+                else:
+                    # Use default keywords as fallback JD text
+                    jd_text = ' '.join(CORE_JD_SEMANTIC_KEYWORDS)
+                    score_jd_semantic_fit._jd_embedding = score_jd_semantic_fit._model.encode(jd_text)
+            
+            # Compute candidate embedding and similarity
+            candidate_embedding = score_jd_semantic_fit._model.encode(text)
+            jd_embedding = score_jd_semantic_fit._jd_embedding
+            
+            # Cosine similarity
+            dot_product = np.dot(candidate_embedding, jd_embedding)
+            norm_candidate = np.linalg.norm(candidate_embedding)
+            norm_jd = np.linalg.norm(jd_embedding)
+            
+            if norm_candidate > 0 and norm_jd > 0:
+                similarity = dot_product / (norm_candidate * norm_jd)
+                return float(similarity)
+        except ImportError:
+            print("[SEMANTIC] sentence-transformers not available, falling back to keyword matching")
+            use_embeddings = False
+        except Exception as e:
+            print(f"[SEMANTIC] Embedding computation failed: {e}, falling back to keyword matching")
+            use_embeddings = False
+    
+    # Fallback: keyword-based matching
     match_count = 0
     unique_matches = set()
     for kw in CORE_JD_SEMANTIC_KEYWORDS:
@@ -345,7 +427,7 @@ def get_domain_penalty_multiplier(candidate: dict) -> float:
 # ── REASONING GENERATION ─────────────────────────────────────────────────────
 
 def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
-    """Per-candidate reasoning using only facts from the profile."""
+    """Per-candidate reasoning using only facts from the profile, with skill-to-requirement mapping."""
     p = candidate['profile']
     sig = candidate['redrob_signals']
     title = p.get('current_title', 'Unknown')
@@ -363,6 +445,16 @@ def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
         reverse=True
     )
     skill_str = ', '.join(s['name'] for s in ai_skills[:3]) if ai_skills else 'general tech skills'
+
+    # Skill-to-requirement mapping if JD is available
+    skill_match_str = ''
+    if PARSED_JD and PARSED_JD.required_skills:
+        candidate_skill_names = {s.get('name', '').lower() for s in candidate.get('skills', [])}
+        matched_skills = [skill for skill in PARSED_JD.required_skills if skill.lower() in candidate_skill_names]
+        match_count = len(matched_skills)
+        total_required = len(PARSED_JD.required_skills)
+        if match_count > 0:
+            skill_match_str = f' | matches {match_count}/{total_required} JD requirements: {", ".join(matched_skills[:3])}'
 
     # Build concern string
     concerns = []
@@ -382,7 +474,7 @@ def generate_reasoning(candidate: dict, score: float, components: dict) -> str:
     concern_str = f'; concern: {", ".join(concerns)}' if concerns else ''
 
     return (
-        f'{title}, {yoe:.1f}y exp; skills: {skill_str}; '
+        f'{title}, {yoe:.1f}y exp; skills: {skill_str}{skill_match_str}; '
         f'response_rate={rr:.2f}; {loc}{concern_str}.'
     )
 
@@ -459,7 +551,7 @@ def compute_score(candidate: dict) -> tuple[float, dict]:
         }
 
     # 4. Score normal components
-    semantic_score = score_jd_semantic_fit(candidate)
+    semantic_score = score_jd_semantic_fit(candidate, use_embeddings=True)
     domain_mult = get_domain_penalty_multiplier(candidate)
 
     # 5. Weighted sum
@@ -530,8 +622,10 @@ Examples:
                         help='Number of candidates to output (default: 100)')
     parser.add_argument('--include-components', action='store_true',
                         help='Include scoring component breakdown in output')
-    parser.add_argument('--enable-semantic-reranking', action='store_true',
-                        help='Enable semantic embeddings reranking for top-K candidates')
+    parser.add_argument('--enable-semantic-reranking', action='store_true', default=True,
+                        help='Enable semantic embeddings reranking for top-K candidates (default: True)')
+    parser.add_argument('--disable-semantic-reranking', action='store_true',
+                        help='Disable semantic embeddings reranking')
     parser.add_argument('--semantic-top-k', type=int, default=50,
                         help='Number of top candidates to semantically rerank (default: 50)')
     parser.add_argument('--semantic-weight', type=float, default=0.3,
@@ -601,13 +695,25 @@ Examples:
         score, components = compute_score(c)
         scored.append((c['candidate_id'], score, components, c))
 
-    # Apply semantic reranking if enabled
-    if args.enable_semantic_reranking and parsed_jd:
+    # Apply semantic reranking if enabled (default: True)
+    enable_semantic = not args.disable_semantic_reranking
+    if enable_semantic and parsed_jd:
         print(f'[SEMANTIC RERANKING] Top {args.semantic_top_k} candidates...', flush=True)
         jd_text = parsed_jd.title + ' ' + ' '.join(parsed_jd.required_skills)
         scored = integrate_semantic_reranking(
-            scored, 
-            jd_text, 
+            scored,
+            jd_text,
+            enable_semantic=True,
+            top_k=args.semantic_top_k,
+            semantic_weight=args.semantic_weight
+        )
+        print(f'[SEMANTIC RERANKING] Complete', flush=True)
+    elif enable_semantic and not parsed_jd:
+        print(f'[SEMANTIC RERANKING] Using default JD keywords for semantic scoring', flush=True)
+        jd_text = ' '.join(CORE_JD_SEMANTIC_KEYWORDS)
+        scored = integrate_semantic_reranking(
+            scored,
+            jd_text,
             enable_semantic=True,
             top_k=args.semantic_top_k,
             semantic_weight=args.semantic_weight
