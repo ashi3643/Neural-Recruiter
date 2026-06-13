@@ -599,7 +599,7 @@ Examples:
   # CSV input instead of JSONL
   python rank.py --candidates candidates.csv --jd job_description.txt --out submission.csv
   
-  # Use LLM for JD parsing (requires OPENAI_API_KEY env var)
+  # Use LLM for JD parsing (requires GEMINI_API_KEY env var)
   python rank.py --candidates candidates.jsonl --jd job_description.txt --use-llm --out submission.csv
   
   # Load from cache if available
@@ -613,7 +613,7 @@ Examples:
     parser.add_argument('--jd-text', default=None,
                         help='Job description as text string (alternative to --jd file)')
     parser.add_argument('--use-llm', action='store_true',
-                        help='Use LLM (GPT-4) for JD parsing (requires OPENAI_API_KEY)')
+                        help='Use LLM (Gemini) for JD parsing (requires GEMINI_API_KEY env var)'}]
     parser.add_argument('--use-cache', action='store_true',
                         help='Use cached ranking if available (saves time)')
     parser.add_argument('--out', default='submission.csv',

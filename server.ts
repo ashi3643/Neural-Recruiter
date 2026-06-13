@@ -71,34 +71,37 @@ async function readCandidatesFromFile(filePath: string): Promise<any[]> {
       }
     }
   } else if (ext === '.csv') {
-    // Parse CSV file
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n').filter(line => line.trim());
-    
-    if (lines.length < 2) {
-      console.warn("CSV file is empty or has no data rows");
-      return candidates;
-    }
-    
-    // Parse header
-    const headers = lines[0].split(',').map(h => h.trim());
-    
-    // Parse data rows
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      if (values.length !== headers.length) {
-        console.warn(`Skipping malformed CSV row ${i + 1}`);
+    const fileStream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    let headers: string[] | null = null;
+    let rowIndex = 0;
+
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+
+      if (!headers) {
+        headers = parseCSVLine(line);
         continue;
       }
-      
-      const row: any = {};
+
+      rowIndex++;
+      const values = parseCSVLine(line);
+      if (!headers || values.length !== headers.length) {
+        console.warn(`Skipping malformed CSV row ${rowIndex + 1}`);
+        continue;
+      }
+
+      const row: Record<string, string> = {};
       headers.forEach((header, index) => {
         row[header] = values[index];
       });
-      
-      // Convert CSV row to candidate format matching csv_utils.py
+
       try {
-        const candidate: any = {
+        candidates.push({
           candidate_id: row.candidate_id || '',
           profile: {
             name: row.name || '',
@@ -115,10 +118,9 @@ async function readCandidatesFromFile(filePath: string): Promise<any[]> {
           education: JSON.parse(row.education_json || '[]'),
           certifications: JSON.parse(row.certifications_json || '[]'),
           redrob_signals: JSON.parse(row.signals_json || '{}'),
-        };
-        candidates.push(candidate);
+        });
       } catch (e) {
-        console.warn(`Failed to parse CSV row ${i + 1}:`, e);
+        console.warn(`Failed to parse CSV row ${rowIndex + 1}:`, e);
       }
     }
   } else {
@@ -128,11 +130,40 @@ async function readCandidatesFromFile(filePath: string): Promise<any[]> {
   return candidates;
 }
 
+// API Endpoint: Retrieve candidate count without loading full payload
+app.get('/api/candidates/count', async (req: Request, res: Response) => {
+  try {
+    const filePath = (req.query.file as string) || process.env.CANDIDATES_FILE || 'candidates.csv';
+    const candidatesPath = path.join(process.cwd(), filePath);
+
+    if (!fs.existsSync(candidatesPath)) {
+      return res.status(200).json({ count: 0, file: filePath });
+    }
+
+    const ext = path.extname(candidatesPath).toLowerCase();
+    if (ext === '.jsonl') {
+      let count = 0;
+      const fileStream = fs.createReadStream(candidatesPath);
+      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+      for await (const line of rl) {
+        if (line.trim()) count++;
+      }
+      return res.status(200).json({ count, file: filePath });
+    }
+
+    const candidates = await readCandidatesFromFile(candidatesPath);
+    return res.status(200).json({ count: candidates.length, file: filePath });
+  } catch (err: any) {
+    console.error("Failed to count candidates:", err);
+    return res.status(500).json({ error: "Failed to count candidates." });
+  }
+});
+
 // API Endpoint: Retrieve candidates dynamically from file
 app.get('/api/candidates', async (req: Request, res: Response) => {
   try {
     // Support dynamic file path via query parameter
-    const filePath = req.query.file as string || 'candidates.jsonl';
+    const filePath = (req.query.file as string) || process.env.CANDIDATES_FILE || 'candidates.csv';
     const candidatesPath = path.join(process.cwd(), filePath);
     
     if (!fs.existsSync(candidatesPath)) {
@@ -254,9 +285,9 @@ app.post('/api/candidate-critique', async (req: Request, res: Response) => {
       `**2. Critical Technical Questions Suggested:** (Provide 2 precise, deep-dive technical questions targeting their actual stated work history)\n` +
       `**3. Outreach Pitch:** (Provide a short personalized 2-sentence outreach proposal citing their specific company work history)`;
 
-    // Call Gemini using the recommended model gemini-3.5-flash
+    // Call Gemini using gemini-2.5-flash (available on free tier for this project)
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         systemInstruction,

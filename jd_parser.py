@@ -7,7 +7,14 @@ Supports both rule-based parsing and optional LLM-based parsing.
 
 import re
 import json
+import os
 from typing import Dict, List, Optional, Any
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from dataclasses import dataclass
 
 
@@ -25,7 +32,10 @@ class ParsedJobDescription:
 
 
 class JDParser:
-    """Parse job descriptions into structured requirements."""
+    """
+    Parse job descriptions into structured requirements.
+    Supports LLM-based parsing via Google Gemini API and rule-based fallback.
+    """
     
     # Common role type patterns
     ROLE_PATTERNS = {
@@ -60,7 +70,7 @@ class JDParser:
         
         Args:
             use_llm: Whether to use LLM-based parsing (requires API key)
-            api_key: OpenAI/Anthropic API key for LLM parsing
+            api_key: Google Gemini API key (set via GEMINI_API_KEY env var)
         """
         self.use_llm = use_llm
         self.api_key = api_key
@@ -78,9 +88,12 @@ class JDParser:
             ParsedJobDescription with structured requirements
         """
         # Try LLM parsing first (AI-powered approach)
-        if self.api_key:
+        # Get API key from argument or environment
+        api_key = self.api_key or os.environ.get('GEMINI_API_KEY')
+        
+        if api_key:
             try:
-                return self._parse_with_llm(job_description)
+                return self._parse_with_llm(job_description, api_key)
             except Exception as e:
                 print(f"[JD PARSER] LLM parsing failed: {e}, falling back to rule-based parsing")
         
@@ -120,39 +133,54 @@ class JDParser:
             raw_text=jd_text
         )
     
-    def _parse_with_llm(self, jd_text: str) -> ParsedJobDescription:
-        """Parse JD using LLM (requires API key)."""
+    def _parse_with_llm(self, jd_text: str, api_key: str) -> ParsedJobDescription:
+        """Parse JD using Google Gemini API (requires GEMINI_API_KEY)."""
         try:
-            import openai
-            client = openai.OpenAI(api_key=self.api_key)
+            import google.generativeai as genai
             
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a job description parser. Extract structured information from job descriptions.
-Return a JSON object with:
-- title: job title
-- required_skills: list of required technical skills
-- preferred_skills: list of preferred/nice-to-have skills  
-- experience_min: minimum years of experience (int)
-- experience_max: maximum years of experience (int, or null if not specified)
-- role_type: primary role category (e.g., "ML Engineer", "Data Scientist", "Search Engineer")
-- domain_keywords: list of domain-specific keywords
-- seniority_level: one of "junior", "mid", "senior", "lead", "principal"
-"""
-                    },
-                    {
-                        "role": "user",
-                        "content": jd_text
-                    }
-                ],
-                temperature=0.1,
-                response_format={"type": "json_object"}
+            # Configure Gemini API
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Create prompt for job description parsing
+            prompt = f"""You are a professional job description parser. Extract structured information from the following job description and return a JSON object with exactly these fields:
+- title: job title (string)
+- required_skills: list of required technical skills (array of strings)
+- preferred_skills: list of preferred/nice-to-have skills (array of strings)
+- experience_min: minimum years of experience (integer)
+- experience_max: maximum years of experience (integer or null)
+- role_type: primary role category like "ML Engineer", "Data Scientist", "Search Engineer" (string)
+- domain_keywords: list of domain-specific keywords (array of strings)
+- seniority_level: one of "junior", "mid", "senior", "lead", "principal" (string)
+
+Job Description:
+{jd_text}
+
+Respond with ONLY valid JSON, no additional text or markdown."""
+            
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    top_p=0.8,
+                    top_k=40,
+                    max_output_tokens=1024,
+                    response_mime_type="application/json",
+                )
             )
             
-            parsed = json.loads(response.choices[0].message.content)
+            # Extract and parse JSON from response
+            response_text = response.text.strip()
+            # Remove markdown code blocks if present
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.startswith('```'):
+                response_text = response_text[3:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            parsed = json.loads(response_text)
             
             return ParsedJobDescription(
                 title=parsed.get('title', ''),
@@ -169,7 +197,7 @@ Return a JSON object with:
             )
             
         except Exception as e:
-            print(f"LLM parsing failed, falling back to rule-based: {e}")
+            print(f"[JD PARSER] Gemini LLM parsing failed: {e}, falling back to rule-based")
             return self._parse_with_rules(jd_text)
     
     def _extract_title(self, jd_text: str) -> str:

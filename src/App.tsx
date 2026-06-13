@@ -1,15 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   Sparkles, Sliders, Briefcase, FileText, Download, 
-  Terminal, ShieldCheck, CheckCircle, RefreshCcw, HelpCircle, AlertOctagon
+  Terminal, ShieldCheck, CheckCircle, RefreshCcw, HelpCircle, AlertOctagon, Upload
 } from 'lucide-react';
 
 import { generate_candidates } from './candidates';
 import { compute_score } from './scorer';
-import { DEFAULT_WEIGHTS } from './constants';
+import { DEFAULT_WEIGHTS, REDROB_JD } from './constants';
 import { Candidate, ScoringResult, SignalWeights } from './types';
+import { parseCandidatesFile } from './utils/importCandidates';
 
-import JDPanel from './components/JDPanel';
+import JDPanel, { JobDescriptionConfig } from './components/JDPanel';
 import WeightsConfig from './components/WeightsConfig';
 import CandidatesTable from './components/CandidatesTable';
 import CandidateDetailModal from './components/CandidateDetailModal';
@@ -20,41 +21,50 @@ const APP_MODE = 'submission'; // Change to 'demo' for UI testing with synthetic
 
 export default function App() {
   const [weights, setWeights] = useState<SignalWeights>(DEFAULT_WEIGHTS);
+  const [jdConfig, setJdConfig] = useState<JobDescriptionConfig>(REDROB_JD);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'ranker' | 'blueprint'>('ranker');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Create state for notification/export banner
   const [exportBanner, setExportBanner] = useState<string | null>(null);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
 
   // Initialize candidates database based on mode
   const [candidatesList, setCandidatesList] = useState<Candidate[]>(() => {
     // In submission mode, never use synthetic candidates
     if (APP_MODE === 'submission') {
-      return []; // Will be populated from official dataset via API
+      return []; // Will be populated from official dataset via API or import
     }
     return generate_candidates(); // Demo mode: use synthetic candidates
   });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [isScoring, setIsScoring] = useState<boolean>(false);
+  const [scoredCandidates, setScoredCandidates] = useState<ScoringResult[]>([]);
+  const [dataSource, setDataSource] = useState<string | null>(null);
 
-  // Synchronize candidates dynamically from server candidates.jsonl endpoint
+  // Synchronize candidates dynamically from server (candidates.csv or candidates.jsonl)
   useEffect(() => {
     let active = true;
     async function fetchCandidates() {
       try {
         setIsSyncing(true);
-        const res = await fetch('/api/candidates');
-        if (res.ok) {
+        const preferredFiles = ['candidates.csv', 'candidates.jsonl'];
+        for (const file of preferredFiles) {
+          const res = await fetch(`/api/candidates?file=${encodeURIComponent(file)}`);
+          if (!res.ok) continue;
           const data = await res.json();
           if (active && data.candidates && data.candidates.length > 0) {
             setCandidatesList(data.candidates);
-            console.log(`Successfully fetched and parsed ${data.candidates.length} candidates dynamically from candidates.jsonl.`);
+            setDataSource(file);
+            console.log(`Loaded ${data.candidates.length} candidates from ${file}.`);
+            return;
           }
         }
       } catch (err) {
-        // In submission mode, if API fails, don't fall back to synthetic candidates
         if (APP_MODE === 'submission') {
-          console.error("[SUBMISSION MODE] Failed to load official candidates. Cannot proceed with synthetic candidates.", err);
-          setCandidatesList([]);
+          console.warn("[SUBMISSION MODE] No server-side dataset found. Use Import to load your CSV/JSONL.", err);
         } else {
           console.warn("Could not sync with /api/candidates. Using robust local candidate list.", err);
         }
@@ -70,17 +80,68 @@ export default function App() {
     };
   }, []);
 
-  // Compute scoring and sort dynamically as weights calibrate
-  const scoredCandidates: ScoringResult[] = useMemo(() => {
-    const list = candidatesList.map(cand => compute_score(cand, weights));
-    // Sort descending by score, tie-break by ID
-    return list.sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
+  // Score candidates in chunks so large datasets (100k+) stay responsive
+  useEffect(() => {
+    if (candidatesList.length === 0) {
+      setScoredCandidates([]);
+      setIsScoring(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsScoring(true);
+    const CHUNK_SIZE = 5000;
+    const results: ScoringResult[] = [];
+
+    const scoreChunk = (startIndex: number) => {
+      if (cancelled) return;
+
+      const endIndex = Math.min(startIndex + CHUNK_SIZE, candidatesList.length);
+      for (let i = startIndex; i < endIndex; i++) {
+        results.push(compute_score(candidatesList[i], weights));
       }
-      return a.candidate_id.localeCompare(b.candidate_id);
-    });
+
+      const sorted = [...results].sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.candidate_id.localeCompare(b.candidate_id);
+      });
+      setScoredCandidates(sorted);
+
+      if (endIndex < candidatesList.length) {
+        window.setTimeout(() => scoreChunk(endIndex), 0);
+      } else {
+        setIsScoring(false);
+      }
+    };
+
+    scoreChunk(0);
+    return () => {
+      cancelled = true;
+    };
   }, [candidatesList, weights]);
+
+  const handleImportFile = useCallback(async (file: File) => {
+    try {
+      setIsImporting(true);
+      setImportBanner(`Importing ${file.name}...`);
+      const imported = await parseCandidatesFile(file);
+      if (imported.length === 0) {
+        throw new Error('No valid candidates found in the uploaded file.');
+      }
+      setCandidatesList(imported);
+      setDataSource(file.name);
+      setImportBanner(`Imported ${imported.length.toLocaleString()} candidates from ${file.name}.`);
+      setTimeout(() => setImportBanner(null), 6000);
+    } catch (err: any) {
+      setImportBanner(err?.message || 'Failed to import candidate file.');
+      setTimeout(() => setImportBanner(null), 6000);
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, []);
 
   // Retrieve current selected candidate detail
   const selectedCandidateResult = useMemo(() => {
@@ -192,6 +253,25 @@ export default function App() {
 
           <div className="h-6 w-[1px] bg-[#ececeb] hidden sm:block"></div>
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.jsonl"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportFile(file);
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="flex items-center gap-2 px-5 py-2 bg-white text-[#1a1a1a] hover:bg-[#fafaf9] border border-[#ececeb] transition-colors text-[11px] font-bold uppercase tracking-widest rounded-full disabled:opacity-50"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>{isImporting ? 'Importing...' : 'Import Dataset'}</span>
+          </button>
+
           <button
             onClick={handleExportCSV}
             className="px-5 py-2 bg-[#1a1a1a] text-white hover:bg-[#333] active:bg-black transition-colors text-[11px] font-bold uppercase tracking-widest rounded-full"
@@ -209,6 +289,24 @@ export default function App() {
         </div>
       )}
 
+      {importBanner && (
+        <div className="mx-8 mt-6 bg-[#fafaf9] border border-[#ececeb] text-[#1a1a1a] text-xs px-5 py-3.5 rounded-xl flex items-center space-x-2 animate-fade-in font-mono shadow-sm leading-relaxed">
+          <Upload className="w-4 h-4 shrink-0 text-[#1a1a1a]" />
+          <span className="font-medium text-[#1a1a1a]">{importBanner}</span>
+        </div>
+      )}
+
+      {(isSyncing || isScoring) && (
+        <div className="mx-8 mt-6 bg-amber-50 border border-amber-200 text-amber-900 text-xs px-5 py-3.5 rounded-xl flex items-center space-x-2 font-mono shadow-sm leading-relaxed">
+          <RefreshCcw className="w-4 h-4 shrink-0 animate-spin" />
+          <span>
+            {isSyncing
+              ? 'Loading candidate dataset from server...'
+              : `Ranking ${candidatesList.length.toLocaleString()} candidates${dataSource ? ` from ${dataSource}` : ''}...`}
+          </span>
+        </div>
+      )}
+
       {/* Main Core Dashboard Layout */}
       <main className="flex-1 p-8 max-w-7xl w-full mx-auto space-y-6">
         
@@ -220,7 +318,10 @@ export default function App() {
               <div className="bg-white border border-[#ececeb] p-5 rounded-xl flex items-center justify-between shadow-sm">
                 <div>
                   <span className="text-[10px] text-[#888] uppercase tracking-wider font-mono">Overall Candidates</span>
-                  <span className="text-xl font-bold text-[#1a1a1a] block mt-1">{totalPoolSize} in Database</span>
+                  <span className="text-xl font-bold text-[#1a1a1a] block mt-1">{totalPoolSize.toLocaleString()} in Database</span>
+                  {dataSource && (
+                    <span className="text-[9px] text-[#888] font-mono mt-1 block">Source: {dataSource}</span>
+                  )}
                 </div>
                 <div className="bg-[#f0f0ef] text-[#1a1a1a] font-mono text-[9px] uppercase font-bold px-2 py-0.5 rounded border border-[#ececeb]">
                   Total Pool
@@ -250,7 +351,7 @@ export default function App() {
 
             {/* Split JD and Controls Panel */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <JDPanel />
+              <JDPanel jd={jdConfig} onJdChange={setJdConfig} />
               <div className="space-y-4">
                 <WeightsConfig weights={weights} onWeightsChange={setWeights} />
                 {/* Micro utilities */}
