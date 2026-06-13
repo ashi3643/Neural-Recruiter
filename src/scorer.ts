@@ -1,4 +1,4 @@
-import { Candidate, ScoreComponents, ScoringResult, SignalWeights } from './types';
+import { Candidate, ScoreComponents, ScoringResult, SignalWeights, JobDescriptionConfig } from './types';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
@@ -178,9 +178,14 @@ export function score_skills_with_assessment(candidate: Candidate, tier: 'A' | '
     return 0.0;
   }
 
+  // Defensive checks for signals and skill assessment scores
   const signals = candidate.redrob_signals;
+  if (!signals || !signals.skill_assessment_scores) {
+    return 0.70 * base_score + 0.30 * 0.50; // default neutral assessment score
+  }
+
   const scores = signals.skill_assessment_scores;
-  const score_keys = Object.keys(scores);
+  const score_keys = Object.keys(scores || {});
   if (score_keys.length === 0) {
     return 0.70 * base_score + 0.30 * 0.50; // default neutral assessment score
   }
@@ -212,7 +217,51 @@ const CORE_JD_SEMANTIC_KEYWORDS = [
   'pinecone', 'weaviate', 'qdrant', 'milvus', 'faiss', 'chroma'
 ];
 
-export function score_jd_semantic_fit(candidate: Candidate): number {
+function extractKeywordsFromJD(jdConfig: JobDescriptionConfig): string[] {
+  // Extract keywords from JD description and requirements
+  const jdText = (
+    `${jdConfig.title} ${jdConfig.description} ${jdConfig.core_requirements.join(' ')}`
+  ).toLowerCase();
+  
+  // Extract key phrases from JD
+  const keywords = new Set<string>();
+  
+  // Add explicit requirements that appear in the JD
+  const technicalTerms = [
+    'retrieval', 'ranking', 'recommendation', 'search', 'embeddings',
+    'vector', 'dense', 'hybrid', 'semantic', 'ai', 'ml', 'machine learning',
+    'nlp', 'python', 'pytorch', 'tensorflow', 'distributed', 'scale',
+    'production', 'system design', 'architecture', 'infrastructure'
+  ];
+  
+  for (const term of technicalTerms) {
+    if (jdText.includes(term)) {
+      keywords.add(term);
+    }
+  }
+  
+  // Extract any multi-word phrases from core requirements
+  for (const req of jdConfig.core_requirements) {
+    const words = req.toLowerCase().split(/\s+/);
+    if (words.length >= 2) {
+      // Extract bigrams and trigrams
+      for (let i = 0; i < words.length - 1; i++) {
+        const phrase = words.slice(i, i + 2).join(' ');
+        if (phrase.length > 5) keywords.add(phrase);
+      }
+    }
+  }
+  
+  // If no keywords extracted, fall back to defaults
+  if (keywords.size === 0) {
+    return CORE_JD_SEMANTIC_KEYWORDS;
+  }
+  
+  // Merge with default keywords for completeness
+  return Array.from(new Set([...keywords, ...CORE_JD_SEMANTIC_KEYWORDS]));
+}
+
+export function score_jd_semantic_fit(candidate: Candidate, jdConfig?: JobDescriptionConfig): number {
   const profile = candidate.profile;
   const headline = (profile.headline || '').toLowerCase();
   const summary = (profile.summary || '').toLowerCase();
@@ -224,10 +273,13 @@ export function score_jd_semantic_fit(candidate: Candidate): number {
     text += ` ${(role.title || '').toLowerCase()} ${(role.description || '').toLowerCase()}`;
   }
   
+  // Use dynamic JD keywords if jdConfig provided, otherwise use defaults
+  const keywords = jdConfig ? extractKeywordsFromJD(jdConfig) : CORE_JD_SEMANTIC_KEYWORDS;
+  
   let match_count = 0;
   const unique_matches = new Set<string>();
   
-  for (const kw of CORE_JD_SEMANTIC_KEYWORDS) {
+  for (const kw of keywords) {
     if (text.includes(kw)) {
       unique_matches.add(kw);
       let idx = text.indexOf(kw);
@@ -238,8 +290,8 @@ export function score_jd_semantic_fit(candidate: Candidate): number {
     }
   }
   
-  const unique_ratio = Math.min(unique_matches.size / 6.0, 1.0);
-  const freq_score = Math.min(match_count / 15.0, 1.0);
+  const unique_ratio = Math.min(unique_matches.size / Math.max(keywords.length / 4, 6.0), 1.0);
+  const freq_score = Math.min(match_count / Math.max(keywords.length * 2, 15.0), 1.0);
   
   return 0.60 * unique_ratio + 0.40 * freq_score;
 }
@@ -434,7 +486,7 @@ export function generate_reasoning(candidate: Candidate, score: number, componen
 
 // ── MAIN TS COMPUTE SCORER ───────────────────────────────────────────────────
 
-export function compute_score(candidate: Candidate, weights: SignalWeights): ScoringResult {
+export function compute_score(candidate: Candidate, weights: SignalWeights, jdConfig?: JobDescriptionConfig): ScoringResult {
   // 1. Honeypot check
   const { is_honeypot, reasons } = detect_honeypot(candidate);
   if (is_honeypot) {
@@ -526,7 +578,7 @@ export function compute_score(candidate: Candidate, weights: SignalWeights): Sco
   const multiplier = behav_detail.multiplier;
   const loc = score_location(candidate);
   const github = score_github(candidate);
-  const jd_semantic_fit = score_jd_semantic_fit(candidate);
+  const jd_semantic_fit = score_jd_semantic_fit(candidate, jdConfig);
 
   const comps: ScoreComponents = {
     title_alignment: title_align,

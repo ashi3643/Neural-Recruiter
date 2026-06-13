@@ -98,7 +98,7 @@ export default function App() {
 
       const endIndex = Math.min(startIndex + CHUNK_SIZE, candidatesList.length);
       for (let i = startIndex; i < endIndex; i++) {
-        results.push(compute_score(candidatesList[i], weights));
+        results.push(compute_score(candidatesList[i], weights, jdConfig));
       }
 
       const sorted = [...results].sort((a, b) => {
@@ -118,7 +118,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [candidatesList, weights]);
+  }, [candidatesList, weights, jdConfig]);
 
   const handleImportFile = useCallback(async (file: File) => {
     try {

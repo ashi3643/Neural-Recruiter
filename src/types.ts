@@ -101,6 +101,15 @@ export interface SignalWeights {
   jd_semantic_fit: number;
 }
 
+export interface JobDescriptionConfig {
+  title: string;
+  company: string;
+  experience_range: string;
+  location: string;
+  description: string;
+  core_requirements: string[];
+}
+
 export interface ScoringResult {
   candidate_id: string;
   candidate: Candidate;

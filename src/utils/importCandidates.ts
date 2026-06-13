@@ -48,7 +48,36 @@ function csvRowToCandidate(row: Record<string, string>): Candidate | null {
       career_history: JSON.parse(row.career_json || '[]'),
       education: JSON.parse(row.education_json || '[]'),
       certifications: JSON.parse(row.certifications_json || '[]'),
-      redrob_signals: JSON.parse(row.signals_json || '{}'),
+      redrob_signals: (() => {
+        try {
+          const parsed = JSON.parse(row.signals_json || '{}');
+          return {
+            ...parsed,
+            skill_assessment_scores: parsed.skill_assessment_scores || {},
+          };
+        } catch {
+          return {
+            open_to_work_flag: false,
+            last_active_date: '',
+            recruiter_response_rate: 0,
+            avg_response_time_hours: 0,
+            notice_period_days: 0,
+            github_activity_score: 0,
+            interview_completion_rate: 0,
+            offer_acceptance_rate: 0,
+            skill_assessment_scores: {},
+            profile_completeness_score: 0,
+            applications_submitted_30d: 0,
+            saved_by_recruiters_30d: 0,
+            willing_to_relocate: false,
+            preferred_work_mode: '',
+            expected_salary_range_inr_lpa: { min: 0, max: 0 },
+            verified_email: false,
+            verified_phone: false,
+            linkedin_connected: false,
+          };
+        }
+      })(),
     };
   } catch {
     return null;
@@ -65,7 +94,34 @@ export async function parseCandidatesFile(file: File): Promise<Candidate[]> {
     for (const line of text.split('\n')) {
       if (!line.trim()) continue;
       try {
-        candidates.push(JSON.parse(line) as Candidate);
+        const parsed = JSON.parse(line) as Candidate;
+        // Ensure redrob_signals has required properties
+        if (!parsed.redrob_signals) {
+          parsed.redrob_signals = {
+            open_to_work_flag: false,
+            last_active_date: '',
+            recruiter_response_rate: 0,
+            avg_response_time_hours: 0,
+            notice_period_days: 0,
+            github_activity_score: 0,
+            interview_completion_rate: 0,
+            offer_acceptance_rate: 0,
+            skill_assessment_scores: {},
+            profile_completeness_score: 0,
+            applications_submitted_30d: 0,
+            saved_by_recruiters_30d: 0,
+            willing_to_relocate: false,
+            preferred_work_mode: '',
+            expected_salary_range_inr_lpa: { min: 0, max: 0 },
+            verified_email: false,
+            verified_phone: false,
+            linkedin_connected: false,
+          };
+        }
+        if (!parsed.redrob_signals.skill_assessment_scores) {
+          parsed.redrob_signals.skill_assessment_scores = {};
+        }
+        candidates.push(parsed);
       } catch {
         // skip malformed lines
       }
