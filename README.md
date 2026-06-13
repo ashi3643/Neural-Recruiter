@@ -9,6 +9,27 @@ Our core design principle is **architectural honesty over AI-slop**. Instead of 
 
 ---
 
+## 📊 Submission Deliverables
+
+1. ✅ **Code Repository**: Complete, clean, production-ready implementation with zero external dependencies.
+2. ✅ **Presentation Deck**: [PRESENTATION.pdf](PRESENTATION.pdf) — 8-slide professional deck explaining approach, methodology, results, and technical stack.
+3. ✅ **Ranked Output**: [submission.csv](submission.csv) — Top 100 ranked candidates in official format with candidate_id, rank, score, and reasoning.
+4. ✅ **Metadata**: [submission_metadata.yaml](submission_metadata.yaml) — Team details and reproduction command.
+
+### 🎬 Quick Start (30 seconds)
+```bash
+# Run the ranking engine on your dataset
+python rank.py --candidates <your_candidates.jsonl> --out submission.csv
+
+# Validate the output
+python validate_submission.py submission.csv
+
+# View the presentation deck
+open PRESENTATION.pdf  # or open in any PDF viewer
+```
+
+---
+
 ## 🚀 Key Features & Performance Metrics
 
 - **Extremely Fast**: Processes **100,000+ profiles in ~30–45 seconds** on a standard single-core CPU, using streaming file IO with zero external package dependencies.
@@ -21,27 +42,64 @@ Our core design principle is **architectural honesty over AI-slop**. Instead of 
 
 ## 🛠️ Multi-Stage Pipeline Architecture
 
-NeuralRecruiter passes each profile through a strict linear multi-stage funnel:
+NeuralRecruiter passes each profile through a strict linear multi-stage funnel designed for speed, accuracy, and explainability:
 
 ```
-  📋 100,000 Candidates
-         │
-         ▼  (Stage 1)
-  🛡️ Honeypot Scans (Timeline Paradoxes, Expert Hacks, Academic Paradoxes)
-         │  ↳ [Fail] ➔ Blown to Score 0.0 (Absolute Disqualification)
-         ▼  (Stage 2)
-  🏷️ Title Tier Gate (Tier A: Core AI/Search, Tier B: Adjacent SWE, Tier C: Non-Tech)
-         │  ↳ [Tier C] ➔ Suppressed to Floor (Score 0.01)
-         │  ↳ [Tier B with 0 AI Skills] ➔ Suppressed to (Score 0.05)
-         ▼  (Stage 3)
-  🧠 Multi-Signal Scoring Engine (Career, verified Skills depth, Semantic JD Fit)
-         │  ↳ Weighted Sum calculation (Career, Skills, JDFit, Exp, Behav, Loc, GitHub)
-         ▼  (Stage 4)
-  ⚠️ Multipliers & Penalties (Severe inactivity penalties, 0.5x Wrong-Domain CV/Speech Penalty)
-         │
-         ▼
-  🏆 Precise Top 100 Shortlist (export ready)
+┌────────────────────────────────────────────────────────────────────────┐
+│             🧠 NEURAL RECRUITER RANKING PIPELINE                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+        Input: 100,000 Candidates (candidates.jsonl)
+                           │
+                           ▼
+        ┌───────────────────────────────────────┐
+        │  STAGE 1: Honeypot Detection          │
+        │  • Filter fake profiles               │
+        │  • Detect timeline paradoxes          │
+        │  • Check endorsement integrity        │
+        │  → Fail = Score 0.0                   │
+        └───────────────────────────────────────┘
+                           │ (PASS)
+                           ▼
+        ┌───────────────────────────────────────┐
+        │  STAGE 2: Title Tier Gating           │
+        │  Tier A (Core AI/ML): Full scoring    │
+        │  Tier B (Adjacent): 0.05–0.50         │
+        │  Tier C (Non-Tech): 0.01 floor        │
+        │  → Apply tier penalties               │
+        └───────────────────────────────────────┘
+                           │
+                           ▼
+        ┌───────────────────────────────────────┐
+        │  STAGE 3: Weighted Signal Scoring     │
+        │  • Career Progression (0.20)          │
+        │  • Skills Depth (0.22)                │
+        │  • JD Semantic Fit (0.15)             │
+        │  • Title Alignment (0.15)             │
+        │  • Experience Range (0.10)            │
+        │  • Behavioral Signals (0.10)          │
+        │  • Location Fit (0.04)                │
+        │  • GitHub Activity (0.04)             │
+        │  → Compute 0–1 normalized scores      │
+        └───────────────────────────────────────┘
+                           │
+                           ▼
+        ┌───────────────────────────────────────┐
+        │  STAGE 4: Multipliers & Penalties     │
+        │  • Boost strong matches               │
+        │  • Penalize weak domain fit           │
+        │  • Sort by final score (DESC)         │
+        │  • Select top 100 candidates          │
+        │  → Output with reasoning              │
+        └───────────────────────────────────────┘
+                           │
+                           ▼
+        Output: submission.csv (100 ranked candidates)
+        Format: candidate_id | rank | score | reasoning
 ```
+
+**Performance:** ~60–90 seconds on single-core CPU  
+**Dependencies:** Zero (pure Python 3.10+ standard library only)
 
 ### 1. Stage 1: Honeypot & Timeline Paradox Detection
 Filters fraudulent profiles with:
